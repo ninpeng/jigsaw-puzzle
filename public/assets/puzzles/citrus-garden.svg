@@ -1,0 +1,23 @@
+<svg width="1600" height="900" viewBox="0 0 1600 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1600" height="900" fill="#F4E7B9"/>
+  <rect width="1600" height="900" fill="url(#warm)"/>
+  <circle cx="260" cy="220" r="96" fill="#FFF2C8"/>
+  <path d="M0 640C130 593 294 565 426 602C604 654 714 734 913 716C1130 697 1258 552 1468 538C1519 535 1562 538 1600 545V900H0V640Z" fill="#6F9F52"/>
+  <path d="M0 728C149 686 305 677 456 721C663 781 821 816 1038 787C1245 760 1415 664 1600 654V900H0V728Z" fill="#426A2F"/>
+  <g opacity=".95">
+    <path d="M242 486C279 408 392 416 417 500C434 557 389 608 330 610C263 612 215 545 242 486Z" fill="#FFAA30"/>
+    <path d="M540 360C584 267 708 273 742 363C765 424 728 503 640 507C550 511 503 437 540 360Z" fill="#FFBE44"/>
+    <path d="M1040 445C1082 359 1194 366 1227 448C1255 520 1207 598 1126 600C1040 602 1007 513 1040 445Z" fill="#FF9E27"/>
+    <path d="M1320 276C1360 192 1478 200 1507 286C1528 347 1482 408 1411 409C1336 410 1290 340 1320 276Z" fill="#FFB030"/>
+  </g>
+  <path d="M197 444C221 400 272 370 330 369C383 368 435 394 459 438" stroke="#285A2E" stroke-width="26" stroke-linecap="round"/>
+  <path d="M503 324C535 268 589 231 644 230C699 229 757 263 789 318" stroke="#285A2E" stroke-width="26" stroke-linecap="round"/>
+  <path d="M1006 416C1033 370 1087 336 1139 335C1190 334 1248 364 1277 412" stroke="#285A2E" stroke-width="26" stroke-linecap="round"/>
+  <path d="M1288 250C1320 206 1370 172 1418 171C1464 171 1514 198 1539 242" stroke="#285A2E" stroke-width="24" stroke-linecap="round"/>
+  <defs>
+    <linearGradient id="warm" x1="800" y1="0" x2="800" y2="454" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE8A0"/>
+      <stop offset="1" stop-color="#F6C17A"/>
+    </linearGradient>
+  </defs>
+</svg>
