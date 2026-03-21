@@ -84,7 +84,7 @@ export interface PuzzleSession {
   elapsedMs: number;
   completedAt: string | null;
   assistActions: AssistAction[];
-  trayCollapsed?: boolean;
+  trayCollapsed: boolean;
 }
 
 export interface PuzzleSessionSummary {

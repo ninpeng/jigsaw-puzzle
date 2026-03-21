@@ -25,7 +25,8 @@ const session: PuzzleSession = {
   lastUpdatedAt: '2026-03-13T00:00:00.000Z',
   elapsedMs: 18000,
   completedAt: null,
-  assistActions: []
+  assistActions: [],
+  trayCollapsed: false
 };
 
 describe('PlaySidebar', () => {
