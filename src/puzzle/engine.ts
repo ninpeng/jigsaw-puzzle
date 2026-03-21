@@ -24,10 +24,11 @@ interface SnapResult {
 
 const BOARD_X = 120;
 const BOARD_Y = 96;
+const LAYOUT_WIDTH = 1180;
+const LAYOUT_HEIGHT = 760;
 const MIN_BOARD_WIDTH = 720;
 const TRAY_SLOT_GAP = 12;
-const TRAY_SLOT_COLUMNS = 2;
-const TRAY_SLOT_WIDTH = 240;
+const TRAY_SLOT_FACTORS = [1, 0.9, 0.8, 0.7, 0.6];
 
 function buildBoardDimensions(source: PuzzleSource): { width: number; height: number } {
   const aspectRatio = source.imageWidth / source.imageHeight;
@@ -57,16 +58,50 @@ function createPieceConnectors(
   return { top, right, bottom, left };
 }
 
-function buildTraySlotPosition(index: number, definition: PuzzleDefinition): Point {
-  const columns = Math.max(TRAY_SLOT_COLUMNS, Math.floor(TRAY_SLOT_WIDTH / (definition.pieceWidth + TRAY_SLOT_GAP)));
-  return {
-    x: definition.board.x + definition.board.width + 36 + (index % columns) * (definition.pieceWidth + TRAY_SLOT_GAP),
-    y: definition.board.y + 24 + Math.floor(index / columns) * (definition.pieceHeight + TRAY_SLOT_GAP)
-  };
+function rectanglesIntersect(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  other: { x: number; y: number; width: number; height: number }
+): boolean {
+  return (
+    x < other.x + other.width &&
+    x + width > other.x &&
+    y < other.y + other.height &&
+    y + height > other.y
+  );
 }
 
-function buildSessionPiece(definitionPiece: PuzzlePieceDefinition, trayIndex: number, definition: PuzzleDefinition): PuzzlePieceState {
-  const slot = buildTraySlotPosition(trayIndex, definition);
+function buildTraySlots(definition: PuzzleDefinition, pieceCount: number): Point[] {
+  const boardBounds = definition.board;
+
+  for (const factor of TRAY_SLOT_FACTORS) {
+    const stepX = Math.max(72, Math.round(definition.pieceWidth * factor));
+    const stepY = Math.max(72, Math.round(definition.pieceHeight * factor));
+    const slots: Point[] = [];
+
+    for (let y = 24; y <= LAYOUT_HEIGHT - definition.pieceHeight - 24; y += stepY + TRAY_SLOT_GAP) {
+      for (let x = 24; x <= LAYOUT_WIDTH - definition.pieceWidth - 24; x += stepX + TRAY_SLOT_GAP) {
+        if (
+          rectanglesIntersect(x, y, definition.pieceWidth, definition.pieceHeight, boardBounds)
+        ) {
+          continue;
+        }
+
+        slots.push({ x, y });
+
+        if (slots.length >= pieceCount) {
+          return slots;
+        }
+      }
+    }
+  }
+
+  return [{ x: 24, y: 24 }];
+}
+
+function buildSessionPiece(definitionPiece: PuzzlePieceDefinition, slot: Point): PuzzlePieceState {
   return {
     ...definitionPiece,
     x: slot.x,
@@ -144,11 +179,14 @@ export function createPuzzleDefinition(source: PuzzleSource, preset: DifficultyP
 
 export function createPuzzleSession(definition: PuzzleDefinition, options: SessionOptions = {}): PuzzleSession {
   const timestamp = nowIso();
+  const traySlots = buildTraySlots(definition, definition.pieces.length);
 
   return {
     id: `session-${definition.id}-${timestamp}`,
     definition,
-    pieces: definition.pieces.map((piece, index) => buildSessionPiece(piece, index, definition)),
+    pieces: definition.pieces.map((piece, index) =>
+      buildSessionPiece(piece, traySlots[index] ?? traySlots[traySlots.length - 1])
+    ),
     startedAt: timestamp,
     lastUpdatedAt: timestamp,
     elapsedMs: 0,
@@ -168,6 +206,13 @@ export function updatePiecePosition(session: PuzzleSession, pieceId: string, poi
 
   piece.x = point.x;
   piece.y = point.y;
+  piece.zone =
+    point.x >= nextSession.definition.board.x &&
+    point.x <= nextSession.definition.board.x + nextSession.definition.board.width - nextSession.definition.pieceWidth &&
+    point.y >= nextSession.definition.board.y &&
+    point.y <= nextSession.definition.board.y + nextSession.definition.board.height - nextSession.definition.pieceHeight
+      ? 'board'
+      : 'tray';
   nextSession.lastUpdatedAt = nowIso();
   return nextSession;
 }
@@ -197,6 +242,7 @@ export function snapPieceToBoard(
   piece.x = piece.homeX;
   piece.y = piece.homeY;
   piece.fixed = true;
+  piece.zone = 'board';
   movedSession.completedAt = movedSession.pieces.every((candidate) => candidate.fixed)
     ? nowIso()
     : null;

@@ -2,6 +2,7 @@ import {
   DIFFICULTY_PRESETS,
   createPuzzleDefinition,
   createPuzzleSession,
+  updatePiecePosition,
   separateEdgePieces,
   snapPieceToBoard
 } from '../src/puzzle';
@@ -79,7 +80,37 @@ describe('puzzle engine', () => {
 
     expect(session.trayCollapsed).toBe(false);
     expect(session.pieces.every((piece) => piece.fixed || piece.zone === 'tray')).toBe(true);
-    expect(session.pieces.every((piece) => piece.fixed || piece.y >= definition.board.y)).toBe(true);
+    expect(
+      session.pieces.every(
+        (piece) =>
+          piece.fixed ||
+          (piece.x >= 24 &&
+            piece.x <= 1180 - definition.pieceWidth - 24 &&
+            piece.y >= 24 &&
+            piece.y <= 760 - definition.pieceHeight - 24)
+      )
+    ).toBe(true);
+  });
+
+  it('updates zone when a loose piece moves onto the board and snaps there', () => {
+    const definition = createPuzzleDefinition(builtInSource, DIFFICULTY_PRESETS.easy);
+    const session = createPuzzleSession(definition, { seed: 12 });
+    const target = session.pieces.find((piece) => !piece.fixed)!;
+
+    const movedSession = updatePiecePosition(session, target.id, {
+      x: target.homeX,
+      y: target.homeY
+    });
+
+    expect(movedSession.pieces.find((piece) => piece.id === target.id)?.zone).toBe('board');
+
+    const snapResult = snapPieceToBoard(session, definition, target.id, {
+      x: target.homeX + 8,
+      y: target.homeY - 6
+    });
+
+    expect(snapResult.session.pieces.find((piece) => piece.id === target.id)?.zone).toBe('board');
+    expect(snapResult.session.pieces.find((piece) => piece.id === target.id)?.fixed).toBe(true);
   });
 
   it('moves only unfixed edge pieces into the assist tray', () => {
@@ -100,17 +131,12 @@ describe('puzzle engine', () => {
     expect(innerPiece.y).toBe(originalInnerPiece.y);
   });
 
-  it('keeps every initial piece in the tray workspace', () => {
+  it('keeps every initial piece assigned to the tray zone', () => {
     const definition = createPuzzleDefinition(builtInSource, DIFFICULTY_PRESETS.easy);
     const session = createPuzzleSession(definition, { seed: 22 });
 
     expect(
-      session.pieces.every(
-        (piece) =>
-          piece.zone === 'tray' &&
-          piece.x >= definition.board.x + definition.board.width + 36 &&
-          piece.y >= definition.board.y + 24
-      )
+      session.pieces.every((piece) => piece.zone === 'tray' && !piece.fixed)
     ).toBe(true);
   });
 });
