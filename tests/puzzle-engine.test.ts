@@ -73,6 +73,15 @@ describe('puzzle engine', () => {
     expect(farResult.session.pieces[0].fixed).toBe(false);
   });
 
+  it('creates new sessions with every loose piece placed in the tray', () => {
+    const definition = createPuzzleDefinition(builtInSource, DIFFICULTY_PRESETS.easy);
+    const session = createPuzzleSession(definition, { seed: 12 });
+
+    expect(session.trayCollapsed).toBe(false);
+    expect(session.pieces.every((piece) => piece.fixed || piece.zone === 'tray')).toBe(true);
+    expect(session.pieces.every((piece) => piece.fixed || piece.y >= definition.board.y)).toBe(true);
+  });
+
   it('moves only unfixed edge pieces into the assist tray', () => {
     const definition = createPuzzleDefinition(builtInSource, DIFFICULTY_PRESETS.easy);
     const session = createPuzzleSession(definition, { seed: 7 });
@@ -91,17 +100,16 @@ describe('puzzle engine', () => {
     expect(innerPiece.y).toBe(originalInnerPiece.y);
   });
 
-  it('keeps every initial piece inside the visible play area', () => {
+  it('keeps every initial piece in the tray workspace', () => {
     const definition = createPuzzleDefinition(builtInSource, DIFFICULTY_PRESETS.easy);
     const session = createPuzzleSession(definition, { seed: 22 });
 
     expect(
       session.pieces.every(
         (piece) =>
-          piece.x >= 24 &&
-          piece.x <= 1180 - definition.pieceWidth - 24 &&
-          piece.y >= 24 &&
-          piece.y <= 760 - definition.pieceHeight - 24
+          piece.zone === 'tray' &&
+          piece.x >= definition.board.x + definition.board.width + 36 &&
+          piece.y >= definition.board.y + 24
       )
     ).toBe(true);
   });

@@ -22,23 +22,12 @@ interface SnapResult {
   session: PuzzleSession;
 }
 
-const LAYOUT_WIDTH = 1180;
-const LAYOUT_HEIGHT = 760;
 const BOARD_X = 120;
 const BOARD_Y = 96;
 const MIN_BOARD_WIDTH = 720;
-
-function createRng(seed = 1): () => number {
-  let value = seed % 2147483647;
-  if (value <= 0) {
-    value += 2147483646;
-  }
-
-  return () => {
-    value = (value * 16807) % 2147483647;
-    return (value - 1) / 2147483646;
-  };
-}
+const TRAY_SLOT_GAP = 12;
+const TRAY_SLOT_COLUMNS = 2;
+const TRAY_SLOT_WIDTH = 240;
 
 function buildBoardDimensions(source: PuzzleSource): { width: number; height: number } {
   const aspectRatio = source.imageWidth / source.imageHeight;
@@ -68,40 +57,22 @@ function createPieceConnectors(
   return { top, right, bottom, left };
 }
 
-function buildSessionPiece(definitionPiece: PuzzlePieceDefinition, rng: () => number, definition: PuzzleDefinition): PuzzlePieceState {
-  const safeInset = 18;
-  const minX = 24;
-  const maxX = LAYOUT_WIDTH - definition.pieceWidth - 24;
-  const minY = 24;
-  const maxY = LAYOUT_HEIGHT - definition.pieceHeight - 24;
-  const boardSafeLeft = definition.board.x + safeInset;
-  const boardSafeRight = definition.board.x + definition.board.width - definition.pieceWidth - safeInset;
-  const boardSafeTop = definition.board.y + safeInset;
-  const boardSafeBottom =
-    definition.board.y + definition.board.height - definition.pieceHeight - safeInset;
-  let x = minX;
-  let y = minY;
+function buildTraySlotPosition(index: number, definition: PuzzleDefinition): Point {
+  const columns = Math.max(TRAY_SLOT_COLUMNS, Math.floor(TRAY_SLOT_WIDTH / (definition.pieceWidth + TRAY_SLOT_GAP)));
+  return {
+    x: definition.board.x + definition.board.width + 36 + (index % columns) * (definition.pieceWidth + TRAY_SLOT_GAP),
+    y: definition.board.y + 24 + Math.floor(index / columns) * (definition.pieceHeight + TRAY_SLOT_GAP)
+  };
+}
 
-  for (let attempt = 0; attempt < 24; attempt += 1) {
-    x = minX + Math.round(rng() * (maxX - minX));
-    y = minY + Math.round(rng() * (maxY - minY));
-
-    const insideBoardSafeZone =
-      x >= boardSafeLeft &&
-      x <= boardSafeRight &&
-      y >= boardSafeTop &&
-      y <= boardSafeBottom;
-
-    if (!insideBoardSafeZone) {
-      break;
-    }
-  }
-
+function buildSessionPiece(definitionPiece: PuzzlePieceDefinition, trayIndex: number, definition: PuzzleDefinition): PuzzlePieceState {
+  const slot = buildTraySlotPosition(trayIndex, definition);
   return {
     ...definitionPiece,
-    x,
-    y,
-    fixed: false
+    x: slot.x,
+    y: slot.y,
+    fixed: false,
+    zone: 'tray'
   };
 }
 
@@ -172,18 +143,18 @@ export function createPuzzleDefinition(source: PuzzleSource, preset: DifficultyP
 }
 
 export function createPuzzleSession(definition: PuzzleDefinition, options: SessionOptions = {}): PuzzleSession {
-  const rng = createRng(options.seed ?? definition.id.length);
   const timestamp = nowIso();
 
   return {
     id: `session-${definition.id}-${timestamp}`,
     definition,
-    pieces: definition.pieces.map((piece) => buildSessionPiece(piece, rng, definition)),
+    pieces: definition.pieces.map((piece, index) => buildSessionPiece(piece, index, definition)),
     startedAt: timestamp,
     lastUpdatedAt: timestamp,
     elapsedMs: 0,
     completedAt: null,
-    assistActions: []
+    assistActions: [],
+    trayCollapsed: false
   };
 }
 
