@@ -8,3 +8,4 @@ vite.config.d.ts
 
 .DS_Store
 .codex/
+.worktrees/
