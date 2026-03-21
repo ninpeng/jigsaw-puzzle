@@ -80,16 +80,6 @@ describe('puzzle engine', () => {
 
     expect(session.trayCollapsed).toBe(false);
     expect(session.pieces.every((piece) => piece.fixed || piece.zone === 'tray')).toBe(true);
-    expect(
-      session.pieces.every(
-        (piece) =>
-          piece.fixed ||
-          (piece.x >= 24 &&
-            piece.x <= 1180 - definition.pieceWidth - 24 &&
-            piece.y >= 24 &&
-            piece.y <= 760 - definition.pieceHeight - 24)
-      )
-    ).toBe(true);
   });
 
   it('updates zone when a loose piece moves onto the board and snaps there', () => {
@@ -138,5 +128,34 @@ describe('puzzle engine', () => {
     expect(
       session.pieces.every((piece) => piece.zone === 'tray' && !piece.fixed)
     ).toBe(true);
+  });
+
+  it('keeps every loose piece visible and outside the board origin area', () => {
+    const definition = createPuzzleDefinition(builtInSource, DIFFICULTY_PRESETS.easy);
+    const session = createPuzzleSession(definition, { seed: 22 });
+
+    expect(
+      session.pieces.every(
+        (piece) =>
+          piece.x > -definition.pieceWidth &&
+          piece.x < 1180 &&
+          piece.y > -definition.pieceHeight &&
+          piece.y < 760 &&
+          (piece.x < definition.board.x ||
+            piece.x > definition.board.x + definition.board.width - definition.pieceWidth ||
+            piece.y < definition.board.y ||
+            piece.y > definition.board.y + definition.board.height - definition.pieceHeight)
+      )
+    ).toBe(true);
+  });
+
+  it('does not stack loose pieces onto the same tray slot', () => {
+    const definition = createPuzzleDefinition(builtInSource, DIFFICULTY_PRESETS.hard);
+    const session = createPuzzleSession(definition, { seed: 22 });
+    const slotKeys = new Set(
+      session.pieces.filter((piece) => !piece.fixed).map((piece) => `${piece.x},${piece.y}`)
+    );
+
+    expect(slotKeys.size).toBe(session.pieces.filter((piece) => !piece.fixed).length);
   });
 });

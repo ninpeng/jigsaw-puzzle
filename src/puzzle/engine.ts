@@ -28,7 +28,6 @@ const LAYOUT_WIDTH = 1180;
 const LAYOUT_HEIGHT = 760;
 const MIN_BOARD_WIDTH = 720;
 const TRAY_SLOT_GAP = 12;
-const TRAY_SLOT_FACTORS = [1, 0.9, 0.8, 0.7, 0.6];
 
 function buildBoardDimensions(source: PuzzleSource): { width: number; height: number } {
   const aspectRatio = source.imageWidth / source.imageHeight;
@@ -58,37 +57,24 @@ function createPieceConnectors(
   return { top, right, bottom, left };
 }
 
-function rectanglesIntersect(
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  other: { x: number; y: number; width: number; height: number }
-): boolean {
-  return (
-    x < other.x + other.width &&
-    x + width > other.x &&
-    y < other.y + other.height &&
-    y + height > other.y
-  );
-}
-
 function buildTraySlots(definition: PuzzleDefinition, pieceCount: number): Point[] {
-  const boardBounds = definition.board;
+  const slots: Point[] = [];
+  const stepX = definition.pieceWidth + TRAY_SLOT_GAP;
+  const stepY = definition.pieceHeight + TRAY_SLOT_GAP;
+  const startX = 24 - definition.pieceWidth - TRAY_SLOT_GAP;
+  const endX = LAYOUT_WIDTH - 1;
+  const startY = 24 - definition.pieceHeight - TRAY_SLOT_GAP;
+  const endY = LAYOUT_HEIGHT - 1;
 
-  for (const factor of TRAY_SLOT_FACTORS) {
-    const stepX = Math.max(72, Math.round(definition.pieceWidth * factor));
-    const stepY = Math.max(72, Math.round(definition.pieceHeight * factor));
-    const slots: Point[] = [];
+  for (let y = startY; y <= endY; y += stepY) {
+    for (let x = startX; x <= endX; x += stepX) {
+      const insideBoard =
+        x >= definition.board.x &&
+        x <= definition.board.x + definition.board.width - definition.pieceWidth &&
+        y >= definition.board.y &&
+        y <= definition.board.y + definition.board.height - definition.pieceHeight;
 
-    for (let y = 24; y <= LAYOUT_HEIGHT - definition.pieceHeight - 24; y += stepY + TRAY_SLOT_GAP) {
-      for (let x = 24; x <= LAYOUT_WIDTH - definition.pieceWidth - 24; x += stepX + TRAY_SLOT_GAP) {
-        if (
-          rectanglesIntersect(x, y, definition.pieceWidth, definition.pieceHeight, boardBounds)
-        ) {
-          continue;
-        }
-
+      if (!insideBoard) {
         slots.push({ x, y });
 
         if (slots.length >= pieceCount) {
