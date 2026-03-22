@@ -37,11 +37,13 @@ export function PlayPage() {
   const navigate = useNavigate();
   const { enabled, play, toggleEnabled } = useSound();
   const [session, setSession] = useState<PuzzleSession | null>(null);
+  const [playViewportSize, setPlayViewportSize] = useState({ width: 0, height: 0 });
   const [highlightedPieceId, setHighlightedPieceId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const lastTickRef = useRef<number | null>(null);
+  const playViewportRef = useRef<HTMLDivElement | null>(null);
   const saveTimeoutRef = useRef<number | null>(null);
   const completionHandledRef = useRef(false);
 
@@ -149,6 +151,47 @@ export function PlayPage() {
     };
   }, [highlightedPieceId]);
 
+  useEffect(() => {
+    if (!loaded || !session) {
+      return undefined;
+    }
+
+    const viewport = playViewportRef.current;
+
+    if (!viewport) {
+      return undefined;
+    }
+
+    const updateViewportSize = () => {
+      const nextWidth = Math.round(viewport.getBoundingClientRect().width);
+      const nextHeight = Math.round(viewport.getBoundingClientRect().height);
+
+      setPlayViewportSize((current) => {
+        if (current.width === nextWidth && current.height === nextHeight) {
+          return current;
+        }
+
+        return { width: nextWidth, height: nextHeight };
+      });
+    };
+
+    updateViewportSize();
+
+    if (typeof ResizeObserver === 'undefined') {
+      return undefined;
+    }
+
+    const observer = new ResizeObserver(() => {
+      updateViewportSize();
+    });
+
+    observer.observe(viewport);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [loaded, session]);
+
   const completionRatio = useMemo(() => {
     if (!session) {
       return 0;
@@ -206,18 +249,21 @@ export function PlayPage() {
         }}
       />
       <section className="board-panel">
-        <Suspense fallback={<div className="board-frame loading-shell">보드를 준비하는 중입니다...</div>}>
-          <PuzzleBoard
-            session={session}
-            highlightedPieceId={highlightedPieceId}
-            onPlaySound={(soundId) => {
-              void play(soundId);
-            }}
-            onSessionChange={(nextSession) => {
-              setSession({ ...nextSession, elapsedMs });
-            }}
-          />
-        </Suspense>
+        <div ref={playViewportRef} className="play-viewport" data-testid="play-viewport">
+          <Suspense fallback={<div className="board-frame loading-shell">보드를 준비하는 중입니다...</div>}>
+            <PuzzleBoard
+              session={session}
+              highlightedPieceId={highlightedPieceId}
+              viewportSize={playViewportSize}
+              onPlaySound={(soundId) => {
+                void play(soundId);
+              }}
+              onSessionChange={(nextSession) => {
+                setSession({ ...nextSession, elapsedMs });
+              }}
+            />
+          </Suspense>
+        </div>
       </section>
     </main>
   );

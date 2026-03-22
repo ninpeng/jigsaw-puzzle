@@ -8,6 +8,7 @@ import type { SoundId } from '../audio/soundRegistry';
 interface PuzzleBoardProps {
   session: PuzzleSession;
   highlightedPieceId: string | null;
+  viewportSize?: { width: number; height: number };
   onPlaySound: (soundId: SoundId) => void;
   onSessionChange: (session: PuzzleSession) => void;
 }
@@ -387,6 +388,7 @@ function drawVerticalEdge(
 export function PuzzleBoard({
   session,
   highlightedPieceId,
+  viewportSize,
   onPlaySound,
   onSessionChange
 }: PuzzleBoardProps) {
@@ -427,6 +429,10 @@ export function PuzzleBoard({
   useEffect(() => {
     sceneRef.current?.highlightPiece(highlightedPieceId);
   }, [highlightedPieceId]);
+
+  useEffect(() => {
+    void viewportSize;
+  }, [viewportSize]);
 
   return <div ref={hostRef} className="board-frame" />;
 }
