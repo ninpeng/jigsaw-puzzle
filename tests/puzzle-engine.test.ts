@@ -99,7 +99,7 @@ describe('puzzle engine', () => {
   it('stores normalized board coordinates when a loose piece moves onto the board', () => {
     const definition = createPuzzleDefinition(builtInSource, DIFFICULTY_PRESETS.easy);
     const session = createPuzzleSession(definition, { seed: 12 });
-    const target = session.pieces.find((piece) => !piece.fixed)!;
+    const target = session.pieces.find((piece) => piece.row > 0 && piece.col > 0)!;
 
     const movedSession = updatePiecePosition(session, target.id, {
       x: target.homeX,
@@ -167,6 +167,7 @@ describe('puzzle engine', () => {
     expect(fixedEdge.x).toBe(session.pieces.find((piece) => piece.id === fixedEdge.id)!.x);
     expect(movedEdge.zone).toBe('tray');
     expect(movedEdge.traySlotIndex).not.toBeNull();
+    expect(movedEdge.y).toBeGreaterThanOrEqual(definition.board.y + definition.board.height + 24);
     expect(innerPiece.x).toBe(originalInnerPiece.x);
     expect(innerPiece.y).toBe(originalInnerPiece.y);
   });

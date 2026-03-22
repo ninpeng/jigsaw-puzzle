@@ -154,12 +154,13 @@ function setBoardPlacement(piece: PuzzlePieceState, definition: PuzzleDefinition
 
 function normalizeLooseTrayPieces(session: PuzzleSession): PuzzleSession {
   const trayPieces = session.pieces.filter((piece) => !piece.fixed && piece.zone === 'tray');
-  const traySlots = buildTraySlots(session.definition, trayPieces.length);
 
   trayPieces.sort(compareLooseTrayPieces).forEach((piece, index) => {
-    const slot = traySlots[index] ?? traySlots[traySlots.length - 1] ?? { x: 24, y: 24 };
-
-    Object.assign(piece, setTrayPlacement(piece, index, slot));
+    Object.assign(piece, {
+      zone: 'tray',
+      traySlotIndex: index,
+      boardPosition: null
+    });
   });
 
   session.lastUpdatedAt = nowIso();
