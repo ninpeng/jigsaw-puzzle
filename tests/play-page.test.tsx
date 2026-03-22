@@ -96,6 +96,27 @@ describe('PlayPage', () => {
     vi.clearAllMocks();
   });
 
+  it('locks the board panel height to the window viewport instead of content growth', async () => {
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      value: 1280
+    });
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      value: 900
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/play/session-play-page']}>
+        <Routes>
+          <Route path="/play/:sessionId" element={<PlayPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByTestId('board-panel')).toHaveStyle({ height: '844px' });
+  });
+
   it('renders the play board inside a responsive full-size container', async () => {
     render(
       <MemoryRouter initialEntries={['/play/session-play-page']}>

@@ -21,6 +21,19 @@ const PuzzleBoard = lazy(async () => {
   return { default: module.PuzzleBoard };
 });
 
+const DEFAULT_PAGE_PADDING = 28;
+const COMPACT_PAGE_PADDING = 16;
+const COMPACT_PAGE_BREAKPOINT = 720;
+const BOARD_PANEL_PADDING = 14;
+const MIN_BOARD_PANEL_HEIGHT = 360;
+
+function resolveBoardPanelHeight(windowWidth: number, windowHeight: number) {
+  const shellPadding =
+    windowWidth <= COMPACT_PAGE_BREAKPOINT ? COMPACT_PAGE_PADDING : DEFAULT_PAGE_PADDING;
+
+  return Math.max(MIN_BOARD_PANEL_HEIGHT, windowHeight - shellPadding * 2);
+}
+
 function makeSourceFromSession(session: PuzzleSession): PuzzleSource {
   return {
     id: session.definition.sourceId,
@@ -38,6 +51,11 @@ export function PlayPage() {
   const navigate = useNavigate();
   const { enabled, play, toggleEnabled } = useSound();
   const [session, setSession] = useState<PuzzleSession | null>(null);
+  const [boardPanelHeight, setBoardPanelHeight] = useState(() =>
+    typeof window === 'undefined'
+      ? 0
+      : resolveBoardPanelHeight(window.innerWidth, window.innerHeight)
+  );
   const [playViewportSize, setPlayViewportSize] = useState({ width: 0, height: 0 });
   const [highlightedPieceId, setHighlightedPieceId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -45,6 +63,8 @@ export function PlayPage() {
   const [elapsedMs, setElapsedMs] = useState(0);
   const [currentTrayPage, setCurrentTrayPage] = useState(0);
   const lastTickRef = useRef<number | null>(null);
+  const playShellRef = useRef<HTMLElement | null>(null);
+  const boardPanelRef = useRef<HTMLElement | null>(null);
   const playViewportRef = useRef<HTMLDivElement | null>(null);
   const saveTimeoutRef = useRef<number | null>(null);
   const completionHandledRef = useRef(false);
@@ -188,15 +208,26 @@ export function PlayPage() {
       return undefined;
     }
 
+    const shell = playShellRef.current;
+    const boardPanel = boardPanelRef.current;
     const viewport = playViewportRef.current;
 
-    if (!viewport) {
+    if (!shell || !boardPanel || !viewport) {
       return undefined;
     }
 
     const updateViewportSize = () => {
+      const nextPanelHeight = resolveBoardPanelHeight(window.innerWidth, window.innerHeight);
       const nextWidth = Math.round(viewport.getBoundingClientRect().width);
-      const nextHeight = Math.round(viewport.getBoundingClientRect().height);
+      const nextHeight = Math.max(1, nextPanelHeight - BOARD_PANEL_PADDING * 2);
+
+      setBoardPanelHeight((current) => {
+        if (current === nextPanelHeight) {
+          return current;
+        }
+
+        return nextPanelHeight;
+      });
 
       setPlayViewportSize((current) => {
         if (current.width === nextWidth && current.height === nextHeight) {
@@ -208,19 +239,24 @@ export function PlayPage() {
     };
 
     updateViewportSize();
+    window.addEventListener('resize', updateViewportSize);
 
     if (typeof ResizeObserver === 'undefined') {
-      return undefined;
+      return () => {
+        window.removeEventListener('resize', updateViewportSize);
+      };
     }
 
     const observer = new ResizeObserver(() => {
       updateViewportSize();
     });
 
-    observer.observe(viewport);
+    observer.observe(shell);
+    observer.observe(boardPanel);
 
     return () => {
       observer.disconnect();
+      window.removeEventListener('resize', updateViewportSize);
     };
   }, [loaded, session]);
 
@@ -247,7 +283,7 @@ export function PlayPage() {
   }
 
   return (
-    <main className="play-shell">
+    <main ref={playShellRef} className="play-shell">
       <PlaySidebar
         session={session}
         completionRatio={completionRatio}
@@ -296,7 +332,12 @@ export function PlayPage() {
           toggleEnabled();
         }}
       />
-      <section className="board-panel">
+      <section
+        ref={boardPanelRef}
+        className="board-panel"
+        data-testid="board-panel"
+        style={boardPanelHeight > 0 ? { height: `${boardPanelHeight}px` } : undefined}
+      >
         <div ref={playViewportRef} className="play-viewport" data-testid="play-viewport">
           <Suspense fallback={<div className="board-frame loading-shell">보드를 준비하는 중입니다...</div>}>
             <PuzzleBoard
