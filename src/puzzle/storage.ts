@@ -88,17 +88,23 @@ function migrateLegacySession(session: PuzzleSession): PuzzleSession {
         };
   });
 
-  const trayPieces = migratedPieces
-    .filter((piece): piece is (typeof migratedPieces)[number] & { zone: 'tray' } => piece.zone === 'tray')
-    .sort(compareLegacyTrayPieces);
-
-  trayPieces.forEach((piece, index) => {
-    piece.traySlotIndex = index;
-  });
+  const traySlotIndexes = new Map(
+    migratedPieces
+      .filter((piece) => piece.zone === 'tray')
+      .sort(compareLegacyTrayPieces)
+      .map((piece, index) => [piece.id, index])
+  );
 
   return {
     ...session,
-    pieces: migratedPieces
+    pieces: migratedPieces.map((piece) =>
+      piece.zone === 'tray'
+        ? {
+            ...piece,
+            traySlotIndex: traySlotIndexes.get(piece.id) ?? null
+          }
+        : piece
+    )
   };
 }
 

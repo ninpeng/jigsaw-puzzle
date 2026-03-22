@@ -90,7 +90,7 @@ describe('puzzle storage', () => {
       completedAt: null,
       assistActions: [],
       trayCollapsed: false
-    } as PuzzleSession;
+    } as unknown as PuzzleSession;
 
     await savePuzzleSession(legacySession);
 
