@@ -254,7 +254,7 @@ export function PlayPage() {
             <PuzzleBoard
               session={session}
               highlightedPieceId={highlightedPieceId}
-              viewportSize={playViewportSize}
+              viewport={playViewportSize}
               onPlaySound={(soundId) => {
                 void play(soundId);
               }}

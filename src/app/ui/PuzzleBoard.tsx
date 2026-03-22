@@ -1,37 +1,57 @@
 import { useEffect, useRef } from 'react';
 import Phaser from 'phaser';
 
-import { snapPieceToBoard, type PuzzlePieceState, type PuzzleSession } from '../../puzzle';
+import {
+  buildPlayLayout,
+  snapPieceToBoard,
+  type PlayLayout,
+  type PlayViewport,
+  type PuzzlePieceState,
+  type PuzzleSession
+} from '../../puzzle';
 import { resolveBoardDragEndSounds } from '../audio/boardSound';
 import type { SoundId } from '../audio/soundRegistry';
 
-const BOARD_WIDTH = 1180;
-const BOARD_HEIGHT = 760;
+const FALLBACK_VIEWPORT_WIDTH = 1180;
+const FALLBACK_VIEWPORT_HEIGHT = 760;
+const BOARD_OUTLINE_PADDING = 20;
 
 interface PuzzleBoardProps {
   session: PuzzleSession;
   highlightedPieceId: string | null;
-  viewportSize?: { width: number; height: number };
+  viewport?: PlayViewport;
   onPlaySound: (soundId: SoundId) => void;
   onSessionChange: (session: PuzzleSession) => void;
 }
 
+interface PiecePlacement {
+  centerX: number;
+  centerY: number;
+  scale: number;
+}
+
 class PuzzleBoardScene extends Phaser.Scene {
   private currentSession: PuzzleSession;
+  private currentViewport: PlayViewport | null;
   private onPlaySound: (soundId: SoundId) => void;
   private onSessionChange: (session: PuzzleSession) => void;
   private spriteMap = new Map<string, Phaser.GameObjects.Image>();
+  private chromeObjects: Array<{ destroy: () => void }> = [];
   private boardTextureKey: string;
   private dragDepth = 10;
   private highlightTween: Phaser.Tweens.Tween | null = null;
+  private currentLayout: PlayLayout | null = null;
+  private sceneReady = false;
 
   constructor(
     session: PuzzleSession,
+    viewport: PlayViewport | null,
     onSessionChange: (session: PuzzleSession) => void,
     onPlaySound: (soundId: SoundId) => void
   ) {
     super('puzzle-board-scene');
     this.currentSession = session;
+    this.currentViewport = viewport;
     this.onPlaySound = onPlaySound;
     this.onSessionChange = onSessionChange;
     this.boardTextureKey = `board-${session.definition.sourceId}`;
@@ -44,14 +64,24 @@ class PuzzleBoardScene extends Phaser.Scene {
   }
 
   create() {
-    this.renderBoardChrome();
-    this.createPieceSprites();
+    this.sceneReady = true;
     this.registerInteractions();
+    this.syncScene();
   }
 
   hydrate(session: PuzzleSession) {
     this.currentSession = session;
-    this.syncSprites();
+    if (this.sceneReady) {
+      this.syncScene();
+    }
+  }
+
+  setViewport(viewport: PlayViewport) {
+    this.currentViewport = viewport;
+
+    if (this.sceneReady) {
+      this.syncScene();
+    }
   }
 
   highlightPiece(pieceId: string | null) {
@@ -67,78 +97,189 @@ class PuzzleBoardScene extends Phaser.Scene {
       return;
     }
 
+    const baseScale = this.getBaseScale(sprite);
     sprite.setDepth(9999);
     this.highlightTween = this.tweens.add({
       targets: sprite,
-      scale: 1.08,
+      scale: baseScale * 1.08,
       duration: 180,
       yoyo: true,
       repeat: 4,
       onComplete: () => {
-        sprite.setScale(1);
+        sprite.setScale(baseScale);
       }
     });
   }
 
-  private renderBoardChrome() {
-    const { board } = this.currentSession.definition;
-    this.add.rectangle(590, 380, 1180, 760, 0xf7edd8, 0.9);
-    this.add.image(
+  private syncScene() {
+    const viewport = this.currentViewport;
+
+    if (!viewport || viewport.width <= 0 || viewport.height <= 0) {
+      return;
+    }
+
+    const layout = buildPlayLayout({
+      width: viewport.width,
+      height: viewport.height,
+      trayCollapsed: this.currentSession.trayCollapsed,
+      pieceCount: this.currentSession.pieces.length,
+      imageWidth: this.currentSession.definition.imageWidth,
+      imageHeight: this.currentSession.definition.imageHeight
+    });
+
+    this.currentLayout = layout;
+    this.renderBoardChrome(layout);
+    this.syncSprites(layout);
+  }
+
+  private renderBoardChrome(layout: PlayLayout) {
+    this.clearChrome();
+
+    const board = layout.board.rect;
+    const tray = layout.tray.rect;
+
+    const boardImage = this.add.image(
       board.x + board.width / 2,
       board.y + board.height / 2,
       this.boardTextureKey
-    )
-      .setDisplaySize(board.width, board.height)
-      .setAlpha(0.14);
-    this.add
-      .rectangle(
+    );
+    boardImage.setDisplaySize(board.width, board.height).setAlpha(0.14);
+    this.chromeObjects.push(boardImage);
+
+    this.chromeObjects.push(
+      this.add
+        .rectangle(
         board.x + board.width / 2,
         board.y + board.height / 2,
-        board.width + 20,
-        board.height + 20
+        board.width + BOARD_OUTLINE_PADDING,
+        board.height + BOARD_OUTLINE_PADDING,
+        0xfffbf2,
+        0.2
       )
       .setStrokeStyle(4, 0x245670, 0.32)
-      .setFillStyle(0xfffbf2, 0.2);
-    this.add
-      .rectangle(590, board.y + board.height + 96, 1080, 160, 0xfffcf7, 0.6)
-      .setStrokeStyle(2, 0x245670, 0.14);
+      .setFillStyle(0xfffbf2, 0.2)
+    );
+
+    this.chromeObjects.push(
+      this.add
+        .rectangle(
+          tray.x + tray.width / 2,
+          tray.y + tray.height / 2,
+          tray.width,
+          tray.height,
+          0xfffcf7,
+          0.6
+        )
+        .setStrokeStyle(2, 0x245670, 0.14)
+    );
   }
 
-  private createPieceSprites() {
+  private clearChrome() {
+    this.chromeObjects.forEach((object) => object.destroy());
+    this.chromeObjects = [];
+  }
+
+  private syncSprites(layout: PlayLayout) {
+    const visiblePieceIds = new Set<string>();
+
     this.currentSession.pieces.forEach((piece) => {
-      const textureKey = this.buildPieceTexture(piece);
-      const sprite = this.add.image(
-        piece.x + this.currentSession.definition.pieceWidth / 2,
-        piece.y + this.currentSession.definition.pieceHeight / 2,
-        textureKey
-      );
+      const placement = this.resolvePiecePlacement(piece, layout);
+      const sprite = this.spriteMap.get(piece.id);
 
-      sprite.setData('pieceId', piece.id);
-      sprite.setDepth(piece.fixed ? 1 : this.dragDepth += 1);
-      sprite.setInteractive({ useHandCursor: !piece.fixed });
+      if (!placement) {
+        if (sprite) {
+          sprite.destroy();
+          this.spriteMap.delete(piece.id);
+        }
 
-      if (piece.fixed) {
-        sprite.disableInteractive();
-      }
-
-      this.input.setDraggable(sprite, !piece.fixed);
-      this.spriteMap.set(piece.id, sprite);
-    });
-  }
-
-  private registerInteractions() {
-    this.input.on('dragstart', (_pointer: Phaser.Input.Pointer, gameObject: Phaser.GameObjects.GameObject) => {
-      const sprite = gameObject as Phaser.GameObjects.Image;
-      const piece = this.getPiece(sprite);
-
-      if (!piece || piece.fixed) {
         return;
       }
 
-      this.onPlaySound('piece_pickup');
-      sprite.setScale(1.02);
-      sprite.setDepth(this.dragDepth += 1);
+      visiblePieceIds.add(piece.id);
+
+      if (sprite) {
+        this.updatePieceSprite(sprite, piece, placement);
+        return;
+      }
+
+      const nextSprite = this.createPieceSprite(piece, placement);
+      this.spriteMap.set(piece.id, nextSprite);
     });
+
+    for (const [pieceId, sprite] of this.spriteMap.entries()) {
+      if (visiblePieceIds.has(pieceId)) {
+        continue;
+      }
+
+      sprite.destroy();
+      this.spriteMap.delete(pieceId);
+    }
+  }
+
+  private createPieceSprite(piece: PuzzlePieceState, placement: PiecePlacement) {
+    const textureKey = this.buildPieceTexture(piece);
+    const sprite = this.add.image(placement.centerX, placement.centerY, textureKey);
+
+    sprite.setData('pieceId', piece.id);
+    sprite.setData('baseScale', placement.scale);
+    sprite.setDisplaySize(
+      this.currentSession.definition.pieceWidth * placement.scale,
+      this.currentSession.definition.pieceHeight * placement.scale
+    );
+    sprite.setScale(placement.scale);
+    sprite.setDepth(piece.fixed ? 1 : this.dragDepth += 1);
+    sprite.setInteractive({ useHandCursor: !piece.fixed });
+
+    if (piece.fixed) {
+      sprite.disableInteractive();
+    }
+
+    this.input.setDraggable(sprite, !piece.fixed);
+    sprite.setAlpha(piece.fixed ? 1 : 0.98);
+
+    return sprite;
+  }
+
+  private updatePieceSprite(
+    sprite: Phaser.GameObjects.Image,
+    piece: PuzzlePieceState,
+    placement: PiecePlacement
+  ) {
+    sprite.setData('pieceId', piece.id);
+    sprite.setData('baseScale', placement.scale);
+    sprite.setPosition(placement.centerX, placement.centerY);
+    sprite.setDisplaySize(
+      this.currentSession.definition.pieceWidth * placement.scale,
+      this.currentSession.definition.pieceHeight * placement.scale
+    );
+    sprite.setScale(placement.scale);
+    sprite.setAlpha(piece.fixed ? 1 : 0.98);
+
+    if (piece.fixed) {
+      sprite.disableInteractive();
+      return;
+    }
+
+    sprite.setInteractive({ useHandCursor: true });
+    this.input.setDraggable(sprite, true);
+  }
+
+  private registerInteractions() {
+    this.input.on(
+      'dragstart',
+      (_pointer: Phaser.Input.Pointer, gameObject: Phaser.GameObjects.GameObject) => {
+        const sprite = gameObject as Phaser.GameObjects.Image;
+        const piece = this.getPiece(sprite);
+
+        if (!piece || piece.fixed) {
+          return;
+        }
+
+        this.onPlaySound('piece_pickup');
+        sprite.setScale(this.getBaseScale(sprite) * 1.02);
+        sprite.setDepth(this.dragDepth += 1);
+      }
+    );
 
     this.input.on(
       'drag',
@@ -162,21 +303,22 @@ class PuzzleBoardScene extends Phaser.Scene {
         return;
       }
 
-      sprite.setScale(1);
+      sprite.setScale(this.getBaseScale(sprite));
       const wasCompletedBefore = Boolean(this.currentSession.completedAt);
+      const boardPoint = this.toBoardPoint(sprite);
 
       const result = snapPieceToBoard(this.currentSession, this.currentSession.definition, piece.id, {
-        x: sprite.x - this.currentSession.definition.pieceWidth / 2,
-        y: sprite.y - this.currentSession.definition.pieceHeight / 2
+        x: boardPoint.x,
+        y: boardPoint.y
       });
 
       this.currentSession = result.session;
-      this.syncSprites();
+      this.syncScene();
 
       if (result.didSnap) {
         this.tweens.add({
           targets: sprite,
-          scale: 1.05,
+          scale: this.getBaseScale(sprite) * 1.05,
           duration: 120,
           yoyo: true,
           repeat: 1
@@ -195,32 +337,80 @@ class PuzzleBoardScene extends Phaser.Scene {
     });
   }
 
-  private syncSprites() {
-    this.currentSession.pieces.forEach((piece) => {
-      const sprite = this.spriteMap.get(piece.id);
-
-      if (!sprite) {
-        return;
-      }
-
-      sprite.setPosition(
-        piece.x + this.currentSession.definition.pieceWidth / 2,
-        piece.y + this.currentSession.definition.pieceHeight / 2
-      );
-      sprite.setAlpha(piece.fixed ? 1 : 0.98);
-
-      if (piece.fixed) {
-        sprite.disableInteractive();
-      } else if (!sprite.input?.enabled) {
-        sprite.setInteractive({ useHandCursor: true });
-        this.input.setDraggable(sprite, true);
-      }
-    });
-  }
-
   private getPiece(sprite: Phaser.GameObjects.Image): PuzzlePieceState | undefined {
     const pieceId = sprite.getData('pieceId') as string;
     return this.currentSession.pieces.find((piece) => piece.id === pieceId);
+  }
+
+  private getBaseScale(sprite: Phaser.GameObjects.Image) {
+    return (sprite.getData('baseScale') as number | undefined) ?? 1;
+  }
+
+  private toBoardPoint(sprite: Phaser.GameObjects.Image) {
+    const layout = this.currentLayout;
+    const boardScaleX = layout
+      ? layout.board.rect.width / this.currentSession.definition.board.width
+      : 1;
+    const boardScaleY = layout
+      ? layout.board.rect.height / this.currentSession.definition.board.height
+      : 1;
+    const topLeftX = sprite.x - (this.currentSession.definition.pieceWidth * boardScaleX) / 2;
+    const topLeftY = sprite.y - (this.currentSession.definition.pieceHeight * boardScaleY) / 2;
+
+    if (!layout) {
+      return {
+        x: topLeftX,
+        y: topLeftY
+      };
+    }
+
+    const board = layout.board.rect;
+
+    return {
+      x: this.currentSession.definition.board.x + (topLeftX - board.x) / boardScaleX,
+      y: this.currentSession.definition.board.y + (topLeftY - board.y) / boardScaleY
+    };
+  }
+
+  private resolvePiecePlacement(piece: PuzzlePieceState, layout: PlayLayout): PiecePlacement | null {
+    if (piece.fixed || piece.zone === 'board') {
+      if (!piece.boardPosition) {
+        return null;
+      }
+
+      const scale = layout.board.rect.width / this.currentSession.definition.board.width;
+      const topLeftX = layout.board.rect.x + piece.boardPosition.x * layout.board.rect.width;
+      const topLeftY = layout.board.rect.y + piece.boardPosition.y * layout.board.rect.height;
+
+      return {
+        centerX: topLeftX + (this.currentSession.definition.pieceWidth * scale) / 2,
+        centerY: topLeftY + (this.currentSession.definition.pieceHeight * scale) / 2,
+        scale
+      };
+    }
+
+    if (piece.traySlotIndex === null) {
+      return null;
+    }
+
+    const slot = layout.tray.slots[piece.traySlotIndex];
+
+    if (!slot) {
+      return null;
+    }
+
+    const scale = Math.min(
+      slot.width / this.currentSession.definition.pieceWidth,
+      slot.height / this.currentSession.definition.pieceHeight
+    );
+    const topLeftX = slot.x + (slot.width - this.currentSession.definition.pieceWidth * scale) / 2;
+    const topLeftY = slot.y + (slot.height - this.currentSession.definition.pieceHeight * scale) / 2;
+
+    return {
+      centerX: topLeftX + (this.currentSession.definition.pieceWidth * scale) / 2,
+      centerY: topLeftY + (this.currentSession.definition.pieceHeight * scale) / 2,
+      scale
+    };
   }
 
   private buildPieceTexture(piece: PuzzlePieceState): string {
@@ -391,24 +581,28 @@ function drawVerticalEdge(
 export function PuzzleBoard({
   session,
   highlightedPieceId,
-  viewportSize,
+  viewport,
   onPlaySound,
   onSessionChange
 }: PuzzleBoardProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<PuzzleBoardScene | null>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
+  const currentViewport = viewport ?? {
+    width: FALLBACK_VIEWPORT_WIDTH,
+    height: FALLBACK_VIEWPORT_HEIGHT
+  };
 
   useEffect(() => {
     if (!hostRef.current) {
       return undefined;
     }
 
-    const scene = new PuzzleBoardScene(session, onSessionChange, onPlaySound);
+    const scene = new PuzzleBoardScene(session, viewport ?? null, onSessionChange, onPlaySound);
     const game = new Phaser.Game({
       type: Phaser.CANVAS,
-      width: BOARD_WIDTH,
-      height: BOARD_HEIGHT,
+      width: currentViewport.width,
+      height: currentViewport.height,
       parent: hostRef.current,
       transparent: true,
       backgroundColor: '#f7edd8',
@@ -436,13 +630,13 @@ export function PuzzleBoard({
   useEffect(() => {
     const game = gameRef.current;
 
-    if (!game || !viewportSize?.width || !viewportSize?.height) {
+    if (!game || !viewport?.width || !viewport?.height) {
       return;
     }
 
-    const scale = Math.min(viewportSize.width / BOARD_WIDTH, viewportSize.height / BOARD_HEIGHT);
-    game.scale.setZoom(scale > 0 ? scale : 1);
-  }, [viewportSize]);
+    game.scale.resize(viewport.width, viewport.height);
+    sceneRef.current?.setViewport(viewport);
+  }, [viewport]);
 
   return <div ref={hostRef} className="board-frame" />;
 }
