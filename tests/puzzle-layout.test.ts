@@ -110,6 +110,7 @@ describe('puzzle layout', () => {
 
     expect(layout.mode).toBe('mobile');
     expect(layout.board.rect.height).toBeGreaterThanOrEqual(180);
+    expect(Math.abs(layout.board.rect.width / layout.board.rect.height - 1600 / 900)).toBeLessThan(0.05);
     expect(layout.tray.rect.y).toBeGreaterThanOrEqual(0);
     expect(layout.tray.rect.y + layout.tray.rect.height).toBeLessThanOrEqual(260);
     expect(layout.tray.rect.y).toBeLessThan(layout.board.rect.y + layout.board.rect.height);
@@ -128,7 +129,9 @@ describe('puzzle layout', () => {
     expect(layout.mode).toBe('desktop');
     expect(layout.tray.pageCount).toBe(1);
     expect(layout.tray.pageSize).toBeGreaterThan(0);
+    expect(layout.tray.pageSize).toBe(80);
     expect(layout.tray.slots.length).toBe(layout.tray.pageSize);
+    expect(layout.tray.slots.length).toBe(80);
     expect(
       layout.tray.slots.every(
         (slot) =>

@@ -96,7 +96,7 @@ function buildWideLayout(
     board: { rect: boardRect },
     tray: {
       rect: trayRect,
-      ...buildWideTrayLayout(trayRect, input.pieceCount, WIDE_TRAY_COLUMNS, WIDE_TRAY_ROWS, input.trayCollapsed),
+      ...buildWideTrayLayout(trayRect, input.pieceCount, input.trayCollapsed),
       collapsed: input.trayCollapsed
     }
   };
@@ -149,12 +149,12 @@ function buildMobileLayout(input: BuildPlayLayoutInput, boardAspect: number): Pl
   };
   const availableWidth = Math.max(280, input.width - SAFE_MARGIN * 2);
   const availableHeight = Math.max(MIN_MOBILE_BOARD_HEIGHT, input.height - SAFE_MARGIN * 2);
-  const boardSize = fitRect(availableWidth, availableHeight, boardAspect);
+  const boardSize = fitBoardRect(availableWidth, availableHeight, boardAspect, MIN_MOBILE_BOARD_HEIGHT);
   const boardRect = {
     x: Math.max(SAFE_MARGIN, Math.floor((input.width - boardSize.width) / 2)),
     y: SAFE_MARGIN,
     width: boardSize.width,
-    height: Math.max(MIN_MOBILE_BOARD_HEIGHT, boardSize.height)
+    height: boardSize.height
   };
 
   return {
@@ -183,11 +183,27 @@ function fitRect(maxWidth: number, maxHeight: number, aspect: number): { width: 
   };
 }
 
+function fitBoardRect(
+  maxWidth: number,
+  maxHeight: number,
+  aspect: number,
+  minimumHeight: number
+): { width: number; height: number } {
+  const minimumWidth = Math.round(minimumHeight * aspect);
+
+  if (minimumHeight <= maxHeight && minimumWidth <= maxWidth) {
+    return {
+      width: minimumWidth,
+      height: minimumHeight
+    };
+  }
+
+  return fitRect(maxWidth, maxHeight, aspect);
+}
+
 function buildWideTrayLayout(
   trayRect: LayoutRect,
   pieceCount: number,
-  columns: number,
-  rows: number,
   collapsed: boolean
 ): {
   slots: LayoutRect[];
@@ -198,17 +214,15 @@ function buildWideTrayLayout(
     return { slots: [], pageSize: 0, pageCount: 0 };
   }
 
-  const slots = buildBoundedTraySlots(trayRect, columns, rows);
+  const slots = buildSinglePageWideTraySlots(trayRect, pieceCount);
 
   if (slots.length === 0) {
     return { slots: [], pageSize: 0, pageCount: 0 };
   }
 
-  const visibleSlots = slots.slice(0, Math.min(pieceCount, slots.length));
-
   return {
-    slots: visibleSlots,
-    pageSize: visibleSlots.length,
+    slots,
+    pageSize: slots.length,
     pageCount: 1
   };
 }
@@ -251,6 +265,62 @@ function buildBoundedTraySlots(trayRect: LayoutRect, columns: number, rows: numb
 
   for (let row = 0; row < rows; row += 1) {
     for (let col = 0; col < columns; col += 1) {
+      const x = trayRect.x + GAP + col * (slotSize + GAP);
+      const y = trayRect.y + GAP + row * (slotSize + GAP);
+      const slot: LayoutRect = { x, y, width: slotSize, height: slotSize };
+
+      if (slot.x + slot.width > trayRect.x + trayRect.width || slot.y + slot.height > trayRect.y + trayRect.height) {
+        continue;
+      }
+
+      slots.push(slot);
+    }
+  }
+
+  return slots;
+}
+
+function buildSinglePageWideTraySlots(trayRect: LayoutRect, pieceCount: number): LayoutRect[] {
+  let bestSlots: LayoutRect[] = [];
+  let bestSlotSize = 0;
+
+  for (let columns = 1; columns <= pieceCount; columns += 1) {
+    const rows = Math.ceil(pieceCount / columns);
+    const slots = buildFixedGridSlots(trayRect, columns, rows, pieceCount);
+
+    if (slots.length !== pieceCount) {
+      continue;
+    }
+
+    const slotSize = slots[0]?.width ?? 0;
+
+    if (slotSize > bestSlotSize) {
+      bestSlots = slots;
+      bestSlotSize = slotSize;
+    }
+  }
+
+  return bestSlots;
+}
+
+function buildFixedGridSlots(
+  trayRect: LayoutRect,
+  columns: number,
+  rows: number,
+  pieceCount: number
+): LayoutRect[] {
+  const innerWidth = trayRect.width - GAP * (columns + 1);
+  const innerHeight = trayRect.height - GAP * (rows + 1);
+  const slotSize = Math.floor(Math.min(innerWidth / columns, innerHeight / rows));
+
+  if (slotSize <= 0) {
+    return [];
+  }
+
+  const slots: LayoutRect[] = [];
+
+  for (let row = 0; row < rows && slots.length < pieceCount; row += 1) {
+    for (let col = 0; col < columns && slots.length < pieceCount; col += 1) {
       const x = trayRect.x + GAP + col * (slotSize + GAP);
       const y = trayRect.y + GAP + row * (slotSize + GAP);
       const slot: LayoutRect = { x, y, width: slotSize, height: slotSize };
