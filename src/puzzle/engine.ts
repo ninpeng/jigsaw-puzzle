@@ -89,8 +89,8 @@ function buildTraySlots(definition: PuzzleDefinition, pieceCount: number): Point
 
 function getBoardRelativePosition(definition: PuzzleDefinition, point: Point): Point {
   return {
-    x: point.x - definition.board.x,
-    y: point.y - definition.board.y
+    x: (point.x - definition.board.x) / definition.board.width,
+    y: (point.y - definition.board.y) / definition.board.height
   };
 }
 
@@ -101,6 +101,17 @@ function isPointInsideBoard(definition: PuzzleDefinition, point: Point): boolean
     point.y >= definition.board.y &&
     point.y <= definition.board.y + definition.board.height - definition.pieceHeight
   );
+}
+
+function compareLooseTrayPieces(a: PuzzlePieceState, b: PuzzlePieceState): number {
+  const aIndex = a.traySlotIndex ?? Number.POSITIVE_INFINITY;
+  const bIndex = b.traySlotIndex ?? Number.POSITIVE_INFINITY;
+
+  if (aIndex !== bIndex) {
+    return aIndex - bIndex;
+  }
+
+  return a.id.localeCompare(b.id);
 }
 
 function buildSessionPiece(
@@ -139,6 +150,20 @@ function setBoardPlacement(piece: PuzzlePieceState, definition: PuzzleDefinition
     traySlotIndex: null,
     boardPosition: getBoardRelativePosition(definition, point)
   };
+}
+
+function normalizeLooseTrayPieces(session: PuzzleSession): PuzzleSession {
+  const trayPieces = session.pieces.filter((piece) => !piece.fixed && piece.zone === 'tray');
+  const traySlots = buildTraySlots(session.definition, trayPieces.length);
+
+  trayPieces.sort(compareLooseTrayPieces).forEach((piece, index) => {
+    const slot = traySlots[index] ?? traySlots[traySlots.length - 1] ?? { x: 24, y: 24 };
+
+    Object.assign(piece, setTrayPlacement(piece, index, slot));
+  });
+
+  session.lastUpdatedAt = nowIso();
+  return session;
 }
 
 function nowIso(): string {
@@ -234,13 +259,18 @@ export function updatePiecePosition(session: PuzzleSession, pieceId: string, poi
     return session;
   }
 
-  const placement = isPointInsideBoard(nextSession.definition, point)
+  const isBoardPlacement = isPointInsideBoard(nextSession.definition, point);
+  const placement = isBoardPlacement
     ? setBoardPlacement(piece, nextSession.definition, point)
     : setTrayPlacement(piece, piece.traySlotIndex, point);
 
   Object.assign(piece, placement);
-  nextSession.lastUpdatedAt = nowIso();
-  return nextSession;
+  if (isBoardPlacement) {
+    nextSession.lastUpdatedAt = nowIso();
+    return nextSession;
+  }
+
+  return normalizeLooseTrayPieces(nextSession);
 }
 
 export function snapPieceToBoard(
@@ -258,8 +288,8 @@ export function snapPieceToBoard(
 
   const snapDistance = definition.preset.snapDistance;
   const shouldSnap =
-    Math.abs(piece.x - piece.homeX) <= snapDistance &&
-    Math.abs(piece.y - piece.homeY) <= snapDistance;
+    Math.abs(point.x - piece.homeX) <= snapDistance &&
+    Math.abs(point.y - piece.homeY) <= snapDistance;
 
   if (!shouldSnap) {
     return { didSnap: false, session: movedSession };
@@ -320,5 +350,5 @@ export function separateEdgePieces(session: PuzzleSession, definition: PuzzleDef
     timestamp: nowIso()
   });
   nextSession.lastUpdatedAt = nowIso();
-  return nextSession;
+  return normalizeLooseTrayPieces(nextSession);
 }

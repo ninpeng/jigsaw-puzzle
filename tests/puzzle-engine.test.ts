@@ -110,8 +110,8 @@ describe('puzzle engine', () => {
       zone: 'board',
       traySlotIndex: null,
       boardPosition: {
-        x: target.homeX - definition.board.x,
-        y: target.homeY - definition.board.y
+        x: (target.homeX - definition.board.x) / definition.board.width,
+        y: (target.homeY - definition.board.y) / definition.board.height
       }
     });
 
@@ -125,9 +125,30 @@ describe('puzzle engine', () => {
       fixed: true,
       traySlotIndex: null,
       boardPosition: {
-        x: target.homeX - definition.board.x,
-        y: target.homeY - definition.board.y
+        x: (target.homeX - definition.board.x) / definition.board.width,
+        y: (target.homeY - definition.board.y) / definition.board.height
       }
+    });
+  });
+
+  it('assigns a tray slot again when a loose board piece moves back into the tray', () => {
+    const definition = createPuzzleDefinition(builtInSource, DIFFICULTY_PRESETS.easy);
+    const session = createPuzzleSession(definition, { seed: 12 });
+    const target = session.pieces.find((piece) => !piece.fixed)!;
+    const boardSession = updatePiecePosition(session, target.id, {
+      x: target.homeX,
+      y: target.homeY
+    });
+
+    const returnedSession = updatePiecePosition(boardSession, target.id, {
+      x: target.homeX - definition.board.width,
+      y: target.homeY - definition.board.height
+    });
+
+    expect(returnedSession.pieces.find((piece) => piece.id === target.id)).toMatchObject({
+      zone: 'tray',
+      traySlotIndex: expect.any(Number),
+      boardPosition: null
     });
   });
 
@@ -144,9 +165,30 @@ describe('puzzle engine', () => {
 
     expect(arranged.assistActions.at(-1)?.type).toBe('separate_edges');
     expect(fixedEdge.x).toBe(session.pieces.find((piece) => piece.id === fixedEdge.id)!.x);
-    expect(movedEdge.y).toBeGreaterThanOrEqual(definition.board.y + definition.board.height + 24);
+    expect(movedEdge.zone).toBe('tray');
+    expect(movedEdge.traySlotIndex).not.toBeNull();
     expect(innerPiece.x).toBe(originalInnerPiece.x);
     expect(innerPiece.y).toBe(originalInnerPiece.y);
+  });
+
+  it('rebuilds tray slot indexes uniquely after separating edge pieces', () => {
+    const definition = createPuzzleDefinition(builtInSource, DIFFICULTY_PRESETS.easy);
+    const session = createPuzzleSession(definition, { seed: 7 });
+    const movedSession = updatePiecePosition(session, session.pieces.find((piece) => !piece.fixed)!.id, {
+      x: definition.board.x,
+      y: definition.board.y
+    });
+
+    const arranged = separateEdgePieces(movedSession, definition);
+    const looseTrayPieces = arranged.pieces.filter((piece) => !piece.fixed && piece.zone === 'tray');
+    const trayIndexes = looseTrayPieces.map((piece) => piece.traySlotIndex);
+    const normalizedTrayIndexes = trayIndexes.filter((index): index is number => index !== null);
+
+    expect(new Set(trayIndexes).size).toBe(looseTrayPieces.length);
+    expect(trayIndexes.every((index) => index !== null)).toBe(true);
+    expect(normalizedTrayIndexes.sort((a, b) => a - b)).toEqual([
+      ...Array(looseTrayPieces.length).keys()
+    ]);
   });
 
   it('keeps every initial piece assigned to the tray zone', () => {
