@@ -13,7 +13,13 @@ export interface LayoutRect {
 export interface PlayLayout {
   mode: 'desktop' | 'tablet' | 'mobile';
   board: { rect: LayoutRect };
-  tray: { rect: LayoutRect; slots: LayoutRect[]; collapsed: boolean };
+  tray: {
+    rect: LayoutRect;
+    slots: LayoutRect[];
+    collapsed: boolean;
+    pageSize: number;
+    pageCount: number;
+  };
 }
 
 export interface BuildPlayLayoutInput extends PlayViewport {
@@ -30,7 +36,11 @@ const TABLET_MIN_WIDTH = 640;
 const TRAY_OPEN_WIDTH_RATIO = 0.26;
 const TRAY_COLLAPSED_WIDTH = 64;
 const TRAY_DRAWER_HEIGHT = 188;
-const MIN_USABLE_SLOT_SIZE = 20;
+const MIN_MOBILE_BOARD_HEIGHT = 180;
+const WIDE_TRAY_COLUMNS = 4;
+const WIDE_TRAY_ROWS = 4;
+const MOBILE_TRAY_COLUMNS = 3;
+const MOBILE_TRAY_ROWS = 4;
 
 export function buildPlayLayout(input: BuildPlayLayoutInput): PlayLayout {
   const mode = resolveMode(input.width, input.height);
@@ -86,21 +96,21 @@ function buildWideLayout(
     board: { rect: boardRect },
     tray: {
       rect: trayRect,
-      slots: input.trayCollapsed ? [] : buildTraySlots(trayRect, input.pieceCount),
+      ...buildTrayPage(trayRect, input.pieceCount, WIDE_TRAY_COLUMNS, WIDE_TRAY_ROWS, input.trayCollapsed),
       collapsed: input.trayCollapsed
     }
   };
 }
 
 function buildMobileLayout(input: BuildPlayLayoutInput, boardAspect: number): PlayLayout {
-  const trayHeight = input.trayCollapsed ? TRAY_COLLAPSED_WIDTH : TRAY_DRAWER_HEIGHT;
   const trayWidth = input.width - SAFE_MARGIN * 2;
-  const openTray = input.trayCollapsed
-    ? null
-    : findTrayArrangement(trayWidth, input.height - SAFE_MARGIN * 2 - GAP - 1, input.pieceCount);
+  const maxOpenTrayHeight = Math.max(
+    TRAY_COLLAPSED_WIDTH,
+    input.height - SAFE_MARGIN * 2 - GAP - MIN_MOBILE_BOARD_HEIGHT
+  );
   const resolvedTrayHeight = input.trayCollapsed
-    ? trayHeight
-    : Math.max(TRAY_DRAWER_HEIGHT, openTray?.requiredHeight ?? TRAY_DRAWER_HEIGHT);
+    ? TRAY_COLLAPSED_WIDTH
+    : Math.min(TRAY_DRAWER_HEIGHT, maxOpenTrayHeight);
   const availableHeight = Math.max(1, input.height - SAFE_MARGIN * 2 - GAP - resolvedTrayHeight);
   const availableWidth = Math.max(280, input.width - SAFE_MARGIN * 2);
   const boardSize = fitRect(availableWidth, availableHeight, boardAspect);
@@ -124,7 +134,7 @@ function buildMobileLayout(input: BuildPlayLayoutInput, boardAspect: number): Pl
     board: { rect: boardRect },
     tray: {
       rect: trayRect,
-      slots: input.trayCollapsed ? [] : buildTraySlots(trayRect, input.pieceCount),
+      ...buildTrayPage(trayRect, input.pieceCount, MOBILE_TRAY_COLUMNS, MOBILE_TRAY_ROWS, input.trayCollapsed),
       collapsed: input.trayCollapsed
     }
   };
@@ -145,77 +155,49 @@ function fitRect(maxWidth: number, maxHeight: number, aspect: number): { width: 
   };
 }
 
-function buildTraySlots(trayRect: LayoutRect, pieceCount: number): LayoutRect[] {
-  const arrangement = findTrayArrangement(trayRect.width, trayRect.height, pieceCount);
-
-  if (!arrangement) {
-    return [];
-  }
-
-  return buildSlots(trayRect, pieceCount, arrangement.columns, arrangement.rows, arrangement.slotSize);
-}
-
-function buildSlots(
+function buildTrayPage(
   trayRect: LayoutRect,
   pieceCount: number,
   columns: number,
   rows: number,
-  slotSize: number
-): LayoutRect[] {
+  collapsed: boolean
+): {
+  slots: LayoutRect[];
+  pageSize: number;
+  pageCount: number;
+} {
+  if (collapsed || pieceCount <= 0) {
+    return { slots: [], pageSize: 0, pageCount: 0 };
+  }
+
+  const innerWidth = trayRect.width - GAP * (columns + 1);
+  const innerHeight = trayRect.height - GAP * (rows + 1);
+  const slotSize = Math.max(1, Math.floor(Math.min(innerWidth / columns, innerHeight / rows)));
   const slots: LayoutRect[] = [];
 
   for (let row = 0; row < rows; row += 1) {
     for (let col = 0; col < columns; col += 1) {
-      if (slots.length >= pieceCount) {
-        return slots;
+      const x = trayRect.x + GAP + col * (slotSize + GAP);
+      const y = trayRect.y + GAP + row * (slotSize + GAP);
+      const slot: LayoutRect = { x, y, width: slotSize, height: slotSize };
+
+      if (slot.x + slot.width > trayRect.x + trayRect.width || slot.y + slot.height > trayRect.y + trayRect.height) {
+        continue;
       }
 
-      slots.push({
-        x: trayRect.x + GAP + col * (slotSize + GAP),
-        y: trayRect.y + GAP + row * (slotSize + GAP),
-        width: slotSize,
-        height: slotSize
-      });
+      slots.push(slot);
     }
   }
 
-  return slots;
-}
+  const pageSize = slots.length;
 
-interface TrayArrangement {
-  columns: number;
-  rows: number;
-  slotSize: number;
-  requiredHeight: number;
-}
-
-function findTrayArrangement(
-  trayWidth: number,
-  trayHeight: number,
-  pieceCount: number
-): TrayArrangement | null {
-  if (pieceCount <= 0) {
-    return null;
+  if (pageSize === 0) {
+    return { slots: [], pageSize: 0, pageCount: 0 };
   }
 
-  let best: TrayArrangement | null = null;
-
-  for (let columns = 1; columns <= pieceCount; columns += 1) {
-    const rows = Math.max(1, Math.ceil(pieceCount / columns));
-    const slotWidth = Math.floor((trayWidth - GAP * (columns + 1)) / columns);
-    const slotHeight = Math.floor((trayHeight - GAP * (rows + 1)) / rows);
-    const slotSize = Math.min(slotWidth, slotHeight);
-
-    if (slotSize < MIN_USABLE_SLOT_SIZE) {
-      continue;
-    }
-
-    const requiredHeight = rows * slotSize + GAP * (rows + 1);
-
-    if (!best || slotSize > best.slotSize || (slotSize === best.slotSize && requiredHeight < best.requiredHeight)) {
-      best = { columns, rows, slotSize, requiredHeight };
-    }
-  }
-
-  return best;
+  return {
+    slots: slots.slice(0, Math.min(pieceCount, pageSize)),
+    pageSize,
+    pageCount: Math.ceil(pieceCount / pageSize)
+  };
 }

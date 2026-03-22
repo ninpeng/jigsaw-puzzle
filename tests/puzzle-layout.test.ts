@@ -14,6 +14,8 @@ describe('puzzle layout', () => {
     expect(layout.mode).toBe('desktop');
     expect(layout.tray.rect.width).toBeGreaterThan(0);
     expect(layout.board.rect.width).toBeGreaterThan(layout.board.rect.height);
+    expect(layout.tray.pageSize).toBeGreaterThan(0);
+    expect(layout.tray.pageCount).toBeGreaterThan(0);
   });
 
   it('builds a mobile layout with a bottom drawer tray', () => {
@@ -29,6 +31,9 @@ describe('puzzle layout', () => {
     expect(layout.mode).toBe('mobile');
     expect(layout.tray.rect.height).toBe(64);
     expect(layout.tray.rect.y).toBeGreaterThan(layout.board.rect.y);
+    expect(layout.tray.slots).toEqual([]);
+    expect(layout.tray.pageSize).toBe(0);
+    expect(layout.tray.pageCount).toBe(0);
   });
 
   it('returns no tray slots when the mobile tray is collapsed', () => {
@@ -43,6 +48,8 @@ describe('puzzle layout', () => {
 
     expect(layout.mode).toBe('mobile');
     expect(layout.tray.slots).toEqual([]);
+    expect(layout.tray.pageSize).toBe(0);
+    expect(layout.tray.pageCount).toBe(0);
   });
 
   it('keeps desktop tray slots inside the tray rectangle', () => {
@@ -66,7 +73,7 @@ describe('puzzle layout', () => {
     ).toBe(true);
   });
 
-  it('keeps dense mobile tray slots inside the drawer rectangle and above the minimum size', () => {
+  it('keeps dense mobile tray slots inside the drawer rectangle and uses paging instead of shrinking the board', () => {
     const layout = buildPlayLayout({
       width: 390,
       height: 844,
@@ -76,17 +83,33 @@ describe('puzzle layout', () => {
       imageHeight: 900
     });
 
-    expect(layout.tray.rect.height).toBeGreaterThan(188);
+    expect(layout.board.rect.height).toBeGreaterThanOrEqual(180);
+    expect(layout.tray.pageCount).toBeGreaterThan(1);
+    expect(layout.tray.pageSize).toBeGreaterThan(0);
     expect(
       layout.tray.slots.every(
         (slot) =>
           slot.x >= layout.tray.rect.x &&
           slot.y >= layout.tray.rect.y &&
           slot.x + slot.width <= layout.tray.rect.x + layout.tray.rect.width &&
-          slot.y + slot.height <= layout.tray.rect.y + layout.tray.rect.height &&
-          slot.width >= 20 &&
-          slot.height >= 20
+          slot.y + slot.height <= layout.tray.rect.y + layout.tray.rect.height
       )
     ).toBe(true);
+    expect(layout.tray.slots.length).toBe(layout.tray.pageSize);
+  });
+
+  it('shrinks the mobile drawer to preserve the minimum board height', () => {
+    const layout = buildPlayLayout({
+      width: 390,
+      height: 320,
+      trayCollapsed: false,
+      pieceCount: 24,
+      imageWidth: 1600,
+      imageHeight: 900
+    });
+
+    expect(layout.mode).toBe('mobile');
+    expect(layout.board.rect.height).toBeGreaterThanOrEqual(180);
+    expect(layout.tray.rect.height).toBeLessThan(188);
   });
 });
