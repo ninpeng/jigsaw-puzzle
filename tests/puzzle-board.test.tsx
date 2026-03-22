@@ -444,6 +444,8 @@ describe('PuzzleBoard', () => {
         highlightedPieceId={null}
         viewport={{ width: 1120, height: 760 }}
         currentTrayPage={0}
+        onRequestPreviousTrayPage={vi.fn()}
+        onRequestNextTrayPage={vi.fn()}
         onPlaySound={vi.fn()}
         onSessionChange={vi.fn()}
       />
@@ -473,6 +475,17 @@ describe('PuzzleBoard', () => {
       displayWidth: 960,
       displayHeight: 640
     });
+    expect(
+      phaserMocks.addCanvasCalls.some((key) => key.startsWith('board-outline-built-in-aurora:easy-960x640'))
+    ).toBe(true);
+    expect(
+      phaserMocks.imageCalls.some(
+        (call) =>
+          call.textureKey.startsWith('board-outline-built-in-aurora:easy-960x640') &&
+          call.x === 520 &&
+          call.y === 344
+      )
+    ).toBe(true);
     expect(boardPiece).toMatchObject({
       x: 360,
       y: 264
@@ -498,6 +511,8 @@ describe('PuzzleBoard', () => {
         highlightedPieceId={null}
         viewport={{ width: 1120, height: 760 }}
         currentTrayPage={0}
+        onRequestPreviousTrayPage={vi.fn()}
+        onRequestNextTrayPage={vi.fn()}
         onPlaySound={vi.fn()}
         onSessionChange={vi.fn()}
       />
@@ -515,6 +530,8 @@ describe('PuzzleBoard', () => {
         highlightedPieceId={null}
         viewport={{ width: 640, height: 760 }}
         currentTrayPage={0}
+        onRequestPreviousTrayPage={vi.fn()}
+        onRequestNextTrayPage={vi.fn()}
         onPlaySound={vi.fn()}
         onSessionChange={vi.fn()}
       />
@@ -546,6 +563,8 @@ describe('PuzzleBoard', () => {
         highlightedPieceId={null}
         viewport={{ width: 640, height: 760 }}
         currentTrayPage={1}
+        onRequestPreviousTrayPage={vi.fn()}
+        onRequestNextTrayPage={vi.fn()}
         onPlaySound={vi.fn()}
         onSessionChange={onSessionChange}
       />
@@ -596,5 +615,50 @@ describe('PuzzleBoard', () => {
       }
     });
     expect(onSessionChange).toHaveBeenCalled();
+  });
+
+  it('requests mobile tray page changes from empty-space swipes but blocks them during piece drags', async () => {
+    const mobileLayout = makeLayout(960, 640, [{ x: 76, y: 680, width: 96, height: 96 }]);
+    mobileLayout.mode = 'mobile';
+    mobileLayout.tray.rect = { x: 60, y: 664, width: 280, height: 180 };
+    mobileLayout.tray.pageSize = 1;
+    mobileLayout.tray.pageCount = 3;
+    puzzleMocks.buildPlayLayout.mockReturnValue(mobileLayout);
+
+    const onPreviousTrayPage = vi.fn();
+    const onNextTrayPage = vi.fn();
+
+    render(
+      <PuzzleBoard
+        session={makeSparseTraySession()}
+        highlightedPieceId={null}
+        viewport={{ width: 640, height: 760 }}
+        currentTrayPage={1}
+        onRequestPreviousTrayPage={onPreviousTrayPage}
+        onRequestNextTrayPage={onNextTrayPage}
+        onPlaySound={vi.fn()}
+        onSessionChange={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(phaserMocks.imageCalls.some((call) => call.getData('pieceId') === 'piece-2')).toBe(true);
+    });
+
+    phaserMocks.inputHandlers.pointerdown?.({ x: 300, y: 760 });
+    phaserMocks.inputHandlers.pointerup?.({ x: 180, y: 764 });
+    expect(onNextTrayPage).toHaveBeenCalledTimes(1);
+
+    phaserMocks.inputHandlers.pointerdown?.({ x: 180, y: 760 });
+    phaserMocks.inputHandlers.pointerup?.({ x: 300, y: 764 });
+    expect(onPreviousTrayPage).toHaveBeenCalledTimes(1);
+
+    const draggedPiece = phaserMocks.imageCalls.find((call) => call.getData('pieceId') === 'piece-2');
+    expect(draggedPiece).toBeDefined();
+
+    phaserMocks.inputHandlers.dragstart?.({}, draggedPiece);
+    phaserMocks.inputHandlers.pointerdown?.({ x: 300, y: 760 });
+    phaserMocks.inputHandlers.pointerup?.({ x: 180, y: 764 });
+    expect(onNextTrayPage).toHaveBeenCalledTimes(1);
   });
 });

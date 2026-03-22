@@ -5,6 +5,7 @@ import {
   buildPlayLayout,
   snapPieceToBoard,
   type PlayLayout,
+  type PuzzlePieceDefinition,
   type PlayViewport,
   type PuzzlePieceState,
   type PuzzleSession
@@ -15,12 +16,16 @@ import type { SoundId } from '../audio/soundRegistry';
 const FALLBACK_VIEWPORT_WIDTH = 1180;
 const FALLBACK_VIEWPORT_HEIGHT = 760;
 const BOARD_OUTLINE_PADDING = 20;
+const TRAY_SWIPE_MIN_DISTANCE = 56;
+const TRAY_SWIPE_MAX_VERTICAL_DELTA = 72;
 
 interface PuzzleBoardProps {
   session: PuzzleSession;
   highlightedPieceId: string | null;
   viewport?: PlayViewport;
   currentTrayPage: number;
+  onRequestPreviousTrayPage: () => void;
+  onRequestNextTrayPage: () => void;
   onPlaySound: (soundId: SoundId) => void;
   onSessionChange: (session: PuzzleSession) => void;
 }
@@ -44,12 +49,18 @@ class PuzzleBoardScene extends Phaser.Scene {
   private highlightTween: Phaser.Tweens.Tween | null = null;
   private currentLayout: PlayLayout | null = null;
   private currentTrayPage: number;
+  private onRequestPreviousTrayPage: () => void;
+  private onRequestNextTrayPage: () => void;
+  private activeDragPieceId: string | null = null;
+  private traySwipeAnchor: { x: number; y: number } | null = null;
   private sceneReady = false;
 
   constructor(
     session: PuzzleSession,
     viewport: PlayViewport | null,
     currentTrayPage: number,
+    onRequestPreviousTrayPage: () => void,
+    onRequestNextTrayPage: () => void,
     onSessionChange: (session: PuzzleSession) => void,
     onPlaySound: (soundId: SoundId) => void
   ) {
@@ -57,6 +68,8 @@ class PuzzleBoardScene extends Phaser.Scene {
     this.currentSession = session;
     this.currentViewport = viewport;
     this.currentTrayPage = currentTrayPage;
+    this.onRequestPreviousTrayPage = onRequestPreviousTrayPage;
+    this.onRequestNextTrayPage = onRequestNextTrayPage;
     this.onPlaySound = onPlaySound;
     this.onSessionChange = onSessionChange;
     this.boardTextureKey = `board-${session.definition.sourceId}`;
@@ -87,6 +100,14 @@ class PuzzleBoardScene extends Phaser.Scene {
     if (this.sceneReady) {
       this.syncScene();
     }
+  }
+
+  setTrayPagingHandlers(
+    onRequestPreviousTrayPage: () => void,
+    onRequestNextTrayPage: () => void
+  ) {
+    this.onRequestPreviousTrayPage = onRequestPreviousTrayPage;
+    this.onRequestNextTrayPage = onRequestNextTrayPage;
   }
 
   setViewport(viewport: PlayViewport) {
@@ -156,13 +177,38 @@ class PuzzleBoardScene extends Phaser.Scene {
     const board = layout.board.rect;
     const tray = layout.tray.rect;
 
+    this.chromeObjects.push(
+      this.add
+        .rectangle(
+          board.x + board.width / 2,
+          board.y + board.height / 2,
+          board.width + BOARD_OUTLINE_PADDING,
+          board.height + BOARD_OUTLINE_PADDING,
+          0xf4ead6,
+          0.96
+        )
+        .setStrokeStyle(2, 0x245670, 0.18)
+    );
+
     const boardImage = this.add.image(
       board.x + board.width / 2,
       board.y + board.height / 2,
       this.boardTextureKey
     );
-    boardImage.setDisplaySize(board.width, board.height).setAlpha(0.14);
+    boardImage.setDisplaySize(board.width, board.height).setAlpha(0.08);
     this.chromeObjects.push(boardImage);
+
+    const boardOutlineTextureKey = this.buildBoardOutlineTexture(layout);
+
+    if (boardOutlineTextureKey) {
+      const boardOutline = this.add.image(
+        board.x + board.width / 2,
+        board.y + board.height / 2,
+        boardOutlineTextureKey
+      );
+      boardOutline.setDisplaySize(board.width, board.height).setAlpha(0.96);
+      this.chromeObjects.push(boardOutline);
+    }
 
     this.chromeObjects.push(
       this.add
@@ -172,10 +218,10 @@ class PuzzleBoardScene extends Phaser.Scene {
         board.width + BOARD_OUTLINE_PADDING,
         board.height + BOARD_OUTLINE_PADDING,
         0xfffbf2,
-        0.2
+        0.03
       )
       .setStrokeStyle(4, 0x245670, 0.32)
-      .setFillStyle(0xfffbf2, 0.2)
+      .setFillStyle(0xfffbf2, 0.03)
     );
 
     this.chromeObjects.push(
@@ -293,6 +339,8 @@ class PuzzleBoardScene extends Phaser.Scene {
           return;
         }
 
+        this.activeDragPieceId = piece.id;
+        this.traySwipeAnchor = null;
         this.onPlaySound('piece_pickup');
         sprite.setScale(this.getBaseScale(sprite) * 1.02);
         sprite.setDepth(this.dragDepth += 1);
@@ -316,6 +364,8 @@ class PuzzleBoardScene extends Phaser.Scene {
     this.input.on('dragend', (_pointer: Phaser.Input.Pointer, gameObject: Phaser.GameObjects.GameObject) => {
       const sprite = gameObject as Phaser.GameObjects.Image;
       const piece = this.getPiece(sprite);
+
+      this.activeDragPieceId = null;
 
       if (!piece || piece.fixed) {
         return;
@@ -352,6 +402,48 @@ class PuzzleBoardScene extends Phaser.Scene {
       });
 
       this.onSessionChange(this.currentSession);
+    });
+
+    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      if (!this.canStartTraySwipe(pointer)) {
+        this.traySwipeAnchor = null;
+        return;
+      }
+
+      this.traySwipeAnchor = { x: pointer.x, y: pointer.y };
+    });
+
+    this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+      const swipeAnchor = this.traySwipeAnchor;
+      this.traySwipeAnchor = null;
+
+      if (!swipeAnchor || this.activeDragPieceId) {
+        return;
+      }
+
+      const layout = this.currentLayout;
+
+      if (!layout || !this.isPointInsideRect(pointer, layout.tray.rect)) {
+        return;
+      }
+
+      const deltaX = pointer.x - swipeAnchor.x;
+      const deltaY = pointer.y - swipeAnchor.y;
+
+      if (
+        Math.abs(deltaX) < TRAY_SWIPE_MIN_DISTANCE ||
+        Math.abs(deltaY) > TRAY_SWIPE_MAX_VERTICAL_DELTA ||
+        Math.abs(deltaY) > Math.abs(deltaX)
+      ) {
+        return;
+      }
+
+      if (deltaX > 0) {
+        this.onRequestPreviousTrayPage();
+        return;
+      }
+
+      this.onRequestNextTrayPage();
     });
   }
 
@@ -491,6 +583,7 @@ class PuzzleBoardScene extends Phaser.Scene {
       piece,
       this.currentSession.definition.pieceWidth,
       this.currentSession.definition.pieceHeight,
+      overhang,
       overhang
     );
     context.clip();
@@ -514,6 +607,7 @@ class PuzzleBoardScene extends Phaser.Scene {
       piece,
       this.currentSession.definition.pieceWidth,
       this.currentSession.definition.pieceHeight,
+      overhang,
       overhang
     );
     context.stroke();
@@ -522,19 +616,124 @@ class PuzzleBoardScene extends Phaser.Scene {
     this.textures.addCanvas(textureKey, canvas);
     return textureKey;
   }
+
+  private buildBoardOutlineTexture(layout: PlayLayout): string | null {
+    const board = layout.board.rect;
+    const textureKey = `board-outline-${this.currentSession.definition.id}-${Math.round(board.width)}x${Math.round(
+      board.height
+    )}`;
+
+    if (this.textures.exists(textureKey)) {
+      return textureKey;
+    }
+
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+
+    if (!context) {
+      return null;
+    }
+
+    canvas.width = Math.max(1, Math.round(board.width));
+    canvas.height = Math.max(1, Math.round(board.height));
+
+    const scaleX = canvas.width / this.currentSession.definition.board.width;
+    const scaleY = canvas.height / this.currentSession.definition.board.height;
+    const shadowLineWidth = Math.max(2.2, Math.min(scaleX, scaleY) * 2.4);
+    const highlightLineWidth = Math.max(1.1, shadowLineWidth * 0.48);
+
+    this.currentSession.definition.pieces.forEach((piece) => {
+      const left = (piece.homeX - this.currentSession.definition.board.x) * scaleX;
+      const top = (piece.homeY - this.currentSession.definition.board.y) * scaleY;
+
+      context.strokeStyle = 'rgba(70, 88, 97, 0.24)';
+      context.lineWidth = shadowLineWidth;
+      tracePiecePath(
+        context,
+        piece,
+        this.currentSession.definition.pieceWidth * scaleX,
+        this.currentSession.definition.pieceHeight * scaleY,
+        left,
+        top
+      );
+      context.stroke();
+
+      context.strokeStyle = 'rgba(255, 250, 242, 0.62)';
+      context.lineWidth = highlightLineWidth;
+      tracePiecePath(
+        context,
+        piece,
+        this.currentSession.definition.pieceWidth * scaleX,
+        this.currentSession.definition.pieceHeight * scaleY,
+        left,
+        top
+      );
+      context.stroke();
+    });
+
+    this.textures.addCanvas(textureKey, canvas);
+    return textureKey;
+  }
+
+  private canStartTraySwipe(pointer: Phaser.Input.Pointer) {
+    const layout = this.currentLayout;
+
+    if (
+      !layout ||
+      layout.mode !== 'mobile' ||
+      layout.tray.collapsed ||
+      layout.tray.pageCount <= 1 ||
+      this.activeDragPieceId
+    ) {
+      return false;
+    }
+
+    if (!this.isPointInsideRect(pointer, layout.tray.rect)) {
+      return false;
+    }
+
+    return !this.isPointOverVisiblePiece(pointer.x, pointer.y);
+  }
+
+  private isPointInsideRect(pointer: Pick<Phaser.Input.Pointer, 'x' | 'y'>, rect: PlayLayout['tray']['rect']) {
+    return (
+      pointer.x >= rect.x &&
+      pointer.x <= rect.x + rect.width &&
+      pointer.y >= rect.y &&
+      pointer.y <= rect.y + rect.height
+    );
+  }
+
+  private isPointOverVisiblePiece(x: number, y: number) {
+    for (const sprite of this.spriteMap.values()) {
+      if (!sprite.input?.enabled) {
+        continue;
+      }
+
+      const width = sprite.displayWidth || this.currentSession.definition.pieceWidth * sprite.scale;
+      const height = sprite.displayHeight || this.currentSession.definition.pieceHeight * sprite.scale;
+      const left = sprite.x - width / 2;
+      const top = sprite.y - height / 2;
+
+      if (x >= left && x <= left + width && y >= top && y <= top + height) {
+        return true;
+      }
+    }
+
+    return false;
+  }
 }
 
 function tracePiecePath(
   context: CanvasRenderingContext2D,
-  piece: PuzzlePieceState,
+  piece: Pick<PuzzlePieceDefinition, 'connectors'>,
   width: number,
   height: number,
-  overhang: number
+  left: number,
+  top: number
 ) {
   const knobWidth = width * 0.24;
   const knobDepth = Math.min(width, height) * 0.18;
-  const left = overhang;
-  const top = overhang;
   const right = left + width;
   const bottom = top + height;
 
@@ -634,6 +833,8 @@ export function PuzzleBoard({
   highlightedPieceId,
   viewport,
   currentTrayPage,
+  onRequestPreviousTrayPage,
+  onRequestNextTrayPage,
   onPlaySound,
   onSessionChange
 }: PuzzleBoardProps) {
@@ -654,6 +855,8 @@ export function PuzzleBoard({
       session,
       viewport ?? null,
       currentTrayPage,
+      onRequestPreviousTrayPage,
+      onRequestNextTrayPage,
       onSessionChange,
       onPlaySound
     );
@@ -699,6 +902,10 @@ export function PuzzleBoard({
   useEffect(() => {
     sceneRef.current?.setCurrentTrayPage(currentTrayPage);
   }, [currentTrayPage]);
+
+  useEffect(() => {
+    sceneRef.current?.setTrayPagingHandlers(onRequestPreviousTrayPage, onRequestNextTrayPage);
+  }, [onRequestNextTrayPage, onRequestPreviousTrayPage]);
 
   return <div ref={hostRef} className="board-frame" />;
 }

@@ -304,6 +304,14 @@ export function PlayPage() {
               highlightedPieceId={highlightedPieceId}
               viewport={playViewportSize}
               currentTrayPage={currentTrayPage}
+              onRequestPreviousTrayPage={() => {
+                setCurrentTrayPage((current) => Math.max(0, current - 1));
+              }}
+              onRequestNextTrayPage={() => {
+                setCurrentTrayPage((current) =>
+                  Math.min(Math.max(0, trayPageCount - 1), current + 1)
+                );
+              }}
               onPlaySound={(soundId) => {
                 void play(soundId);
               }}
