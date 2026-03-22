@@ -37,6 +37,7 @@ class PuzzleBoardScene extends Phaser.Scene {
   private onPlaySound: (soundId: SoundId) => void;
   private onSessionChange: (session: PuzzleSession) => void;
   private spriteMap = new Map<string, Phaser.GameObjects.Image>();
+  private trayRenderIndexById = new Map<string, number>();
   private chromeObjects: Array<{ destroy: () => void }> = [];
   private boardTextureKey: string;
   private dragDepth = 10;
@@ -130,15 +131,20 @@ class PuzzleBoardScene extends Phaser.Scene {
       return;
     }
 
+    const looseTrayPieces = this.getLooseTrayPieces();
+
     const layout = buildPlayLayout({
       width: viewport.width,
       height: viewport.height,
       trayCollapsed: this.currentSession.trayCollapsed,
-      pieceCount: this.currentSession.pieces.length,
+      pieceCount: looseTrayPieces.length,
       imageWidth: this.currentSession.definition.imageWidth,
       imageHeight: this.currentSession.definition.imageHeight
     });
 
+    this.trayRenderIndexById = new Map(
+      looseTrayPieces.map((piece, index) => [piece.id, index])
+    );
     this.currentLayout = layout;
     this.renderBoardChrome(layout);
     this.syncSprites(layout);
@@ -358,6 +364,24 @@ class PuzzleBoardScene extends Phaser.Scene {
     return (sprite.getData('baseScale') as number | undefined) ?? 1;
   }
 
+  private getLooseTrayPieces() {
+    return this.currentSession.pieces
+      .filter(
+        (piece): piece is PuzzlePieceState =>
+          !piece.fixed && piece.zone === 'tray' && piece.traySlotIndex !== null
+      )
+      .sort((left, right) => {
+        const leftIndex = left.traySlotIndex ?? Number.POSITIVE_INFINITY;
+        const rightIndex = right.traySlotIndex ?? Number.POSITIVE_INFINITY;
+
+        if (leftIndex !== rightIndex) {
+          return leftIndex - rightIndex;
+        }
+
+        return left.id.localeCompare(right.id);
+      });
+  }
+
   private toBoardPoint(sprite: Phaser.GameObjects.Image) {
     const layout = this.currentLayout;
     const boardScaleX = layout
@@ -401,7 +425,9 @@ class PuzzleBoardScene extends Phaser.Scene {
       };
     }
 
-    if (piece.traySlotIndex === null) {
+    const denseTrayIndex = this.trayRenderIndexById.get(piece.id);
+
+    if (denseTrayIndex === undefined) {
       return null;
     }
 
@@ -414,11 +440,11 @@ class PuzzleBoardScene extends Phaser.Scene {
 
     const activeTrayPage = Math.max(0, Math.min(this.currentTrayPage, pageCount - 1));
 
-    if (Math.floor(piece.traySlotIndex / pageSize) !== activeTrayPage) {
+    if (Math.floor(denseTrayIndex / pageSize) !== activeTrayPage) {
       return null;
     }
 
-    const slot = layout.tray.slots[piece.traySlotIndex % pageSize];
+    const slot = layout.tray.slots[denseTrayIndex % pageSize];
 
     if (!slot) {
       return null;

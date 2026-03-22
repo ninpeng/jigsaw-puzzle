@@ -346,6 +346,22 @@ function makeSession(overrides: Partial<PuzzleSession> = {}): PuzzleSession {
   };
 }
 
+function makeSparseTraySession(): PuzzleSession {
+  const session = makeSession();
+
+  return {
+    ...session,
+    pieces: session.pieces.map((piece) =>
+      piece.zone === 'tray' && piece.traySlotIndex !== null
+        ? {
+            ...piece,
+            traySlotIndex: piece.traySlotIndex + 11
+          }
+        : piece
+    )
+  };
+}
+
 function makeLayout(width: number, height: number, traySlots: PlayLayout['tray']['slots']): PlayLayout {
   return {
     mode: width >= 900 ? 'desktop' : 'mobile',
@@ -438,7 +454,7 @@ describe('PuzzleBoard', () => {
         width: 1120,
         height: 760,
         trayCollapsed: false,
-        pieceCount: 4,
+        pieceCount: 3,
         imageWidth: 1600,
         imageHeight: 900
       });
@@ -526,7 +542,7 @@ describe('PuzzleBoard', () => {
     const onSessionChange = vi.fn();
     render(
       <PuzzleBoard
-        session={makeSession()}
+        session={makeSparseTraySession()}
         highlightedPieceId={null}
         viewport={{ width: 640, height: 760 }}
         currentTrayPage={1}

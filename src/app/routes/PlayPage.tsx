@@ -158,11 +158,15 @@ export function PlayPage() {
       return null;
     }
 
+    const looseTrayPieceCount = session.pieces.filter(
+      (piece) => !piece.fixed && piece.zone === 'tray' && piece.traySlotIndex !== null
+    ).length;
+
     return buildPlayLayout({
       width: playViewportSize.width,
       height: playViewportSize.height,
       trayCollapsed: session.trayCollapsed,
-      pieceCount: session.pieces.length,
+      pieceCount: looseTrayPieceCount,
       imageWidth: session.definition.imageWidth,
       imageHeight: session.definition.imageHeight
     });
