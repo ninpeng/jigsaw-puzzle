@@ -427,6 +427,7 @@ describe('PuzzleBoard', () => {
         session={makeSession()}
         highlightedPieceId={null}
         viewport={{ width: 1120, height: 760 }}
+        currentTrayPage={0}
         onPlaySound={vi.fn()}
         onSessionChange={vi.fn()}
       />
@@ -480,6 +481,7 @@ describe('PuzzleBoard', () => {
         session={makeSession()}
         highlightedPieceId={null}
         viewport={{ width: 1120, height: 760 }}
+        currentTrayPage={0}
         onPlaySound={vi.fn()}
         onSessionChange={vi.fn()}
       />
@@ -496,6 +498,7 @@ describe('PuzzleBoard', () => {
         session={makeSession()}
         highlightedPieceId={null}
         viewport={{ width: 640, height: 760 }}
+        currentTrayPage={0}
         onPlaySound={vi.fn()}
         onSessionChange={vi.fn()}
       />
@@ -513,7 +516,7 @@ describe('PuzzleBoard', () => {
     expect(boardPiece?.scale).toBeCloseTo(0.8333, 3);
   });
 
-  it('renders only the visible mobile tray page and converts drag end coordinates back to canonical board space', async () => {
+  it('renders only the selected mobile tray page and converts drag end coordinates back to canonical board space', async () => {
     const mobileLayout = makeLayout(960, 640, [{ x: 76, y: 680, width: 96, height: 96 }]);
     mobileLayout.mode = 'mobile';
     mobileLayout.tray.pageSize = 1;
@@ -526,13 +529,14 @@ describe('PuzzleBoard', () => {
         session={makeSession()}
         highlightedPieceId={null}
         viewport={{ width: 640, height: 760 }}
+        currentTrayPage={1}
         onPlaySound={vi.fn()}
         onSessionChange={onSessionChange}
       />
     );
 
     await waitFor(() => {
-      expect(phaserMocks.imageCalls.some((call) => call.getData('pieceId') === 'piece-1')).toBe(
+      expect(phaserMocks.imageCalls.some((call) => call.getData('pieceId') === 'piece-2')).toBe(
         true
       );
     });
@@ -541,9 +545,9 @@ describe('PuzzleBoard', () => {
       .filter((call) => typeof call.getData('pieceId') === 'string')
       .map((call) => call.getData('pieceId') as string);
 
-    expect(renderedPieceIds).toEqual(['piece-0', 'piece-1']);
+    expect(renderedPieceIds).toEqual(['piece-0', 'piece-2']);
 
-    const draggedPiece = phaserMocks.imageCalls.find((call) => call.getData('pieceId') === 'piece-1');
+    const draggedPiece = phaserMocks.imageCalls.find((call) => call.getData('pieceId') === 'piece-2');
     expect(draggedPiece).toBeDefined();
 
     draggedPiece?.setPosition(360, 264);
@@ -556,7 +560,7 @@ describe('PuzzleBoard', () => {
     expect(puzzleMocks.snapPieceToBoard).toHaveBeenLastCalledWith(
       expect.anything(),
       expect.anything(),
-      'piece-1',
+      'piece-2',
       {
         x: 300,
         y: 216
@@ -567,7 +571,7 @@ describe('PuzzleBoard', () => {
       y: 264
     });
     const updatedSession = onSessionChange.mock.calls.at(-1)?.[0] as PuzzleSession | undefined;
-    expect(updatedSession?.pieces.find((piece: PuzzleSession['pieces'][number]) => piece.id === 'piece-1')).toMatchObject({
+    expect(updatedSession?.pieces.find((piece: PuzzleSession['pieces'][number]) => piece.id === 'piece-2')).toMatchObject({
       zone: 'board',
       traySlotIndex: null,
       boardPosition: {

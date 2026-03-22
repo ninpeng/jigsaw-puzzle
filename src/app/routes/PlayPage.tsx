@@ -8,6 +8,7 @@ import {
   createStorage,
   savePuzzleSession,
   separateEdgePieces,
+  buildPlayLayout,
   type PuzzleSession,
   type PuzzleSource
 } from '../../puzzle';
@@ -42,6 +43,7 @@ export function PlayPage() {
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
+  const [currentTrayPage, setCurrentTrayPage] = useState(0);
   const lastTickRef = useRef<number | null>(null);
   const playViewportRef = useRef<HTMLDivElement | null>(null);
   const saveTimeoutRef = useRef<number | null>(null);
@@ -151,6 +153,32 @@ export function PlayPage() {
     };
   }, [highlightedPieceId]);
 
+  const playLayout = useMemo(() => {
+    if (!session || playViewportSize.width <= 0 || playViewportSize.height <= 0) {
+      return null;
+    }
+
+    return buildPlayLayout({
+      width: playViewportSize.width,
+      height: playViewportSize.height,
+      trayCollapsed: session.trayCollapsed,
+      pieceCount: session.pieces.length,
+      imageWidth: session.definition.imageWidth,
+      imageHeight: session.definition.imageHeight
+    });
+  }, [playViewportSize.height, playViewportSize.width, session]);
+
+  const trayPageCount = playLayout?.tray.pageCount ?? 0;
+
+  useEffect(() => {
+    if (trayPageCount <= 0) {
+      setCurrentTrayPage(0);
+      return;
+    }
+
+    setCurrentTrayPage((current) => Math.min(current, trayPageCount - 1));
+  }, [trayPageCount]);
+
   useEffect(() => {
     if (!loaded || !session) {
       return undefined;
@@ -221,6 +249,9 @@ export function PlayPage() {
         completionRatio={completionRatio}
         elapsedMs={elapsedMs}
         soundEnabled={enabled}
+        trayCollapsed={session.trayCollapsed}
+        trayPage={currentTrayPage}
+        trayPageCount={trayPageCount}
         onHint={() => {
           void play('hint');
           const hintResult = createHint(session);
@@ -241,6 +272,19 @@ export function PlayPage() {
           void play('ui_click');
           navigate('/');
         }}
+        onToggleTrayCollapsed={() => {
+          setSession({
+            ...session,
+            trayCollapsed: !session.trayCollapsed,
+            elapsedMs
+          });
+        }}
+        onPreviousTrayPage={() => {
+          setCurrentTrayPage((current) => Math.max(0, current - 1));
+        }}
+        onNextTrayPage={() => {
+          setCurrentTrayPage((current) => Math.min(Math.max(0, trayPageCount - 1), current + 1));
+        }}
         onToggleSound={() => {
           if (enabled) {
             void play('ui_click');
@@ -255,6 +299,7 @@ export function PlayPage() {
               session={session}
               highlightedPieceId={highlightedPieceId}
               viewport={playViewportSize}
+              currentTrayPage={currentTrayPage}
               onPlaySound={(soundId) => {
                 void play(soundId);
               }}

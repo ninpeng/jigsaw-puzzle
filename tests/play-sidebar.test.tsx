@@ -42,9 +42,15 @@ describe('PlaySidebar', () => {
         completionRatio={0.35}
         elapsedMs={18000}
         soundEnabled
+        trayCollapsed={false}
+        trayPage={0}
+        trayPageCount={0}
         onHint={onHint}
         onSeparateEdges={onSeparateEdges}
         onGoHome={onGoHome}
+        onToggleTrayCollapsed={vi.fn()}
+        onPreviousTrayPage={vi.fn()}
+        onNextTrayPage={vi.fn()}
         onToggleSound={onToggleSound}
       />
     );
@@ -58,5 +64,39 @@ describe('PlaySidebar', () => {
     expect(onSeparateEdges).toHaveBeenCalled();
     expect(onGoHome).toHaveBeenCalled();
     expect(onToggleSound).toHaveBeenCalled();
+  });
+
+  it('shows tray collapse and mobile page navigation controls when there is more than one tray page', () => {
+    const onPreviousTrayPage = vi.fn();
+    const onNextTrayPage = vi.fn();
+    const onToggleTrayCollapsed = vi.fn();
+
+    render(
+      <PlaySidebar
+        session={session}
+        completionRatio={0.35}
+        elapsedMs={18000}
+        soundEnabled
+        trayCollapsed={false}
+        trayPage={1}
+        trayPageCount={3}
+        onHint={vi.fn()}
+        onSeparateEdges={vi.fn()}
+        onGoHome={vi.fn()}
+        onToggleSound={vi.fn()}
+        onToggleTrayCollapsed={onToggleTrayCollapsed}
+        onPreviousTrayPage={onPreviousTrayPage}
+        onNextTrayPage={onNextTrayPage}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '트레이 접기' }));
+    fireEvent.click(screen.getByRole('button', { name: '이전 페이지' }));
+    fireEvent.click(screen.getByRole('button', { name: '다음 페이지' }));
+
+    expect(onToggleTrayCollapsed).toHaveBeenCalled();
+    expect(onPreviousTrayPage).toHaveBeenCalled();
+    expect(onNextTrayPage).toHaveBeenCalled();
+    expect(screen.getByText('2 / 3')).toBeInTheDocument();
   });
 });

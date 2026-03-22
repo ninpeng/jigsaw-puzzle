@@ -20,6 +20,7 @@ interface PuzzleBoardProps {
   session: PuzzleSession;
   highlightedPieceId: string | null;
   viewport?: PlayViewport;
+  currentTrayPage: number;
   onPlaySound: (soundId: SoundId) => void;
   onSessionChange: (session: PuzzleSession) => void;
 }
@@ -41,17 +42,20 @@ class PuzzleBoardScene extends Phaser.Scene {
   private dragDepth = 10;
   private highlightTween: Phaser.Tweens.Tween | null = null;
   private currentLayout: PlayLayout | null = null;
+  private currentTrayPage: number;
   private sceneReady = false;
 
   constructor(
     session: PuzzleSession,
     viewport: PlayViewport | null,
+    currentTrayPage: number,
     onSessionChange: (session: PuzzleSession) => void,
     onPlaySound: (soundId: SoundId) => void
   ) {
     super('puzzle-board-scene');
     this.currentSession = session;
     this.currentViewport = viewport;
+    this.currentTrayPage = currentTrayPage;
     this.onPlaySound = onPlaySound;
     this.onSessionChange = onSessionChange;
     this.boardTextureKey = `board-${session.definition.sourceId}`;
@@ -71,6 +75,14 @@ class PuzzleBoardScene extends Phaser.Scene {
 
   hydrate(session: PuzzleSession) {
     this.currentSession = session;
+    if (this.sceneReady) {
+      this.syncScene();
+    }
+  }
+
+  setCurrentTrayPage(currentTrayPage: number) {
+    this.currentTrayPage = currentTrayPage;
+
     if (this.sceneReady) {
       this.syncScene();
     }
@@ -393,7 +405,20 @@ class PuzzleBoardScene extends Phaser.Scene {
       return null;
     }
 
-    const slot = layout.tray.slots[piece.traySlotIndex];
+    const pageSize = layout.tray.pageSize;
+    const pageCount = layout.tray.pageCount;
+
+    if (pageSize <= 0 || pageCount <= 0) {
+      return null;
+    }
+
+    const activeTrayPage = Math.max(0, Math.min(this.currentTrayPage, pageCount - 1));
+
+    if (Math.floor(piece.traySlotIndex / pageSize) !== activeTrayPage) {
+      return null;
+    }
+
+    const slot = layout.tray.slots[piece.traySlotIndex % pageSize];
 
     if (!slot) {
       return null;
@@ -582,6 +607,7 @@ export function PuzzleBoard({
   session,
   highlightedPieceId,
   viewport,
+  currentTrayPage,
   onPlaySound,
   onSessionChange
 }: PuzzleBoardProps) {
@@ -598,7 +624,13 @@ export function PuzzleBoard({
       return undefined;
     }
 
-    const scene = new PuzzleBoardScene(session, viewport ?? null, onSessionChange, onPlaySound);
+    const scene = new PuzzleBoardScene(
+      session,
+      viewport ?? null,
+      currentTrayPage,
+      onSessionChange,
+      onPlaySound
+    );
     const game = new Phaser.Game({
       type: Phaser.CANVAS,
       width: currentViewport.width,
@@ -637,6 +669,10 @@ export function PuzzleBoard({
     game.scale.resize(viewport.width, viewport.height);
     sceneRef.current?.setViewport(viewport);
   }, [viewport]);
+
+  useEffect(() => {
+    sceneRef.current?.setCurrentTrayPage(currentTrayPage);
+  }, [currentTrayPage]);
 
   return <div ref={hostRef} className="board-frame" />;
 }

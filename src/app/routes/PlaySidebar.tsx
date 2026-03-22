@@ -6,9 +6,15 @@ interface PlaySidebarProps {
   completionRatio: number;
   elapsedMs: number;
   soundEnabled: boolean;
+  trayCollapsed: boolean;
+  trayPage: number;
+  trayPageCount: number;
   onHint: () => void;
   onSeparateEdges: () => void;
   onGoHome: () => void;
+  onToggleTrayCollapsed: () => void;
+  onPreviousTrayPage: () => void;
+  onNextTrayPage: () => void;
   onToggleSound: () => void;
 }
 
@@ -17,9 +23,15 @@ export function PlaySidebar({
   completionRatio,
   elapsedMs,
   soundEnabled,
+  trayCollapsed,
+  trayPage,
+  trayPageCount,
   onHint,
   onSeparateEdges,
   onGoHome,
+  onToggleTrayCollapsed,
+  onPreviousTrayPage,
+  onNextTrayPage,
   onToggleSound
 }: PlaySidebarProps) {
   return (
@@ -46,6 +58,9 @@ export function PlaySidebar({
         <button type="button" className="secondary-button" onClick={onSeparateEdges}>
           가장자리 분리
         </button>
+        <button type="button" className="secondary-button" onClick={onToggleTrayCollapsed}>
+          {trayCollapsed ? '트레이 열기' : '트레이 접기'}
+        </button>
         <button
           type="button"
           className="ghost-button"
@@ -58,6 +73,34 @@ export function PlaySidebar({
           홈으로
         </button>
       </div>
+      {trayPageCount > 1 ? (
+        <div className="tray-page-controls" aria-label="트레이 페이지">
+          <div className="tray-page-status">
+            <span>트레이 페이지</span>
+            <strong>
+              {trayPage + 1} / {trayPageCount}
+            </strong>
+          </div>
+          <div className="tray-page-actions">
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={onPreviousTrayPage}
+              disabled={trayPage <= 0}
+            >
+              이전 페이지
+            </button>
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={onNextTrayPage}
+              disabled={trayPage >= trayPageCount - 1}
+            >
+              다음 페이지
+            </button>
+          </div>
+        </div>
+      ) : null}
       <div className="reference-card">
         <img
           src={session.definition.thumbnailDataUrl}
