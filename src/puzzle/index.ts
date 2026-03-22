@@ -1,4 +1,5 @@
 export { DIFFICULTY_PRESETS } from './difficulty';
+export { buildPlayLayout } from './layout';
 export {
   createHint,
   createPuzzleDefinition,
@@ -21,3 +22,9 @@ export type {
   PuzzleSource,
   PuzzleSourceType
 } from './types';
+export type {
+  BuildPlayLayoutInput,
+  LayoutRect,
+  PlayLayout,
+  PlayViewport
+} from './layout';
