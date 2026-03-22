@@ -31,6 +31,20 @@ describe('puzzle layout', () => {
     expect(layout.tray.rect.y).toBeGreaterThan(layout.board.rect.y);
   });
 
+  it('returns no tray slots when the mobile tray is collapsed', () => {
+    const layout = buildPlayLayout({
+      width: 390,
+      height: 844,
+      trayCollapsed: true,
+      pieceCount: 80,
+      imageWidth: 1600,
+      imageHeight: 900
+    });
+
+    expect(layout.mode).toBe('mobile');
+    expect(layout.tray.slots).toEqual([]);
+  });
+
   it('keeps desktop tray slots inside the tray rectangle', () => {
     const layout = buildPlayLayout({
       width: 1366,
@@ -52,12 +66,12 @@ describe('puzzle layout', () => {
     ).toBe(true);
   });
 
-  it('keeps mobile tray slots inside the drawer rectangle', () => {
+  it('keeps dense mobile tray slots inside the drawer rectangle', () => {
     const layout = buildPlayLayout({
       width: 390,
       height: 844,
       trayCollapsed: false,
-      pieceCount: 24,
+      pieceCount: 80,
       imageWidth: 1600,
       imageHeight: 900
     });

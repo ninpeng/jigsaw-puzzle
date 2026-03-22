@@ -85,7 +85,7 @@ function buildWideLayout(
     board: { rect: boardRect },
     tray: {
       rect: trayRect,
-      slots: buildTraySlots(trayRect, input.pieceCount),
+      slots: input.trayCollapsed ? [] : buildTraySlots(trayRect, input.pieceCount),
       collapsed: input.trayCollapsed
     }
   };
@@ -116,7 +116,7 @@ function buildMobileLayout(input: BuildPlayLayoutInput, boardAspect: number): Pl
     board: { rect: boardRect },
     tray: {
       rect: trayRect,
-      slots: buildTraySlots(trayRect, input.pieceCount),
+      slots: input.trayCollapsed ? [] : buildTraySlots(trayRect, input.pieceCount),
       collapsed: input.trayCollapsed
     }
   };
@@ -142,27 +142,28 @@ function buildTraySlots(trayRect: LayoutRect, pieceCount: number): LayoutRect[] 
     return [];
   }
 
-  const idealColumns = clamp(
-    Math.round(Math.sqrt((pieceCount * trayRect.width) / Math.max(1, trayRect.height))),
-    1,
-    pieceCount
-  );
-  const candidateColumns = orderedColumnCandidates(idealColumns, pieceCount);
+  let best: { columns: number; rows: number; slotSize: number } | null = null;
 
-  for (const columns of candidateColumns) {
+  for (let columns = 1; columns <= pieceCount; columns += 1) {
     const rows = Math.max(1, Math.ceil(pieceCount / columns));
     const slotWidth = Math.floor((trayRect.width - GAP * (columns + 1)) / columns);
     const slotHeight = Math.floor((trayRect.height - GAP * (rows + 1)) / rows);
     const slotSize = Math.min(slotWidth, slotHeight);
 
-    if (slotSize < 24) {
+    if (slotSize <= 0) {
       continue;
     }
 
-    return buildSlots(trayRect, pieceCount, columns, rows, slotSize);
+    if (!best || slotSize > best.slotSize) {
+      best = { columns, rows, slotSize };
+    }
   }
 
-  return buildSlots(trayRect, pieceCount, 1, pieceCount, Math.max(24, Math.min(trayRect.width, trayRect.height) - GAP * 2));
+  if (!best) {
+    return [];
+  }
+
+  return buildSlots(trayRect, pieceCount, best.columns, best.rows, best.slotSize);
 }
 
 function buildSlots(
@@ -190,27 +191,4 @@ function buildSlots(
   }
 
   return slots;
-}
-
-function orderedColumnCandidates(center: number, pieceCount: number): number[] {
-  const candidates: number[] = [];
-
-  for (let offset = 0; offset < pieceCount; offset += 1) {
-    const lower = center - offset;
-    const upper = center + offset;
-
-    if (lower >= 1 && !candidates.includes(lower)) {
-      candidates.push(lower);
-    }
-
-    if (upper <= pieceCount && upper !== lower && !candidates.includes(upper)) {
-      candidates.push(upper);
-    }
-  }
-
-  return candidates;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
 }
