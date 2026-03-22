@@ -52,6 +52,24 @@ it('builds a mobile layout with a bottom drawer tray', () => {
 });
 ```
 
+```ts
+it('keeps a minimum board height and paged tray contract on dense mobile layouts', () => {
+  const layout = buildPlayLayout({
+    width: 390,
+    height: 844,
+    trayCollapsed: false,
+    pieceCount: 80,
+    imageWidth: 1600,
+    imageHeight: 900
+  });
+
+  expect(layout.mode).toBe('mobile');
+  expect(layout.board.rect.height).toBeGreaterThanOrEqual(MIN_BOARD_HEIGHT);
+  expect(layout.tray.pageSize).toBe(layout.tray.slots.length);
+  expect(layout.tray.pageCount).toBeGreaterThan(1);
+});
+```
+
 **Step 2: Run tests to verify they fail**
 
 Run: `pnpm test tests/puzzle-layout.test.ts`
@@ -78,11 +96,19 @@ export interface LayoutRect {
 export interface PlayLayout {
   mode: 'desktop' | 'tablet' | 'mobile';
   board: { rect: LayoutRect };
-  tray: { rect: LayoutRect; slots: LayoutRect[]; collapsed: boolean };
+  tray: {
+    rect: LayoutRect;
+    slots: LayoutRect[];
+    collapsed: boolean;
+    pageSize: number;
+    pageCount: number;
+  };
 }
 ```
 
 Implement `buildPlayLayout()` with simple mode thresholds and right-tray vs bottom-drawer geometry.
+Add a minimum board height contract for mobile.
+For mobile/open trays, compute visible slots for a single page only; overflow should increase `pageCount`, not keep shrinking the board.
 
 **Step 4: Run tests to verify they pass**
 
@@ -303,6 +329,7 @@ Update Phaser scene to:
 - update normalized placement state on drag/drop/snap
 - preserve existing sound behavior
 - redraw board outlines from the recomputed board rect
+- render only the visible mobile tray page instead of all tray pieces at once
 
 **Step 4: Run tests to verify they pass**
 
@@ -339,6 +366,12 @@ it('shows a drawer-style tray toggle in mobile mode', async () => {
 });
 ```
 
+```tsx
+it('supports mobile tray page navigation with buttons', async () => {
+  // assert previous/next page callbacks and current-page label
+});
+```
+
 **Step 2: Run tests to verify they fail**
 
 Run: `pnpm test tests/play-sidebar.test.tsx`
@@ -351,8 +384,12 @@ Expose:
 - tray collapsed/open toggle
 - `자동 재정렬`
 - `가장자리 분리`
+- mobile current tray page
+- previous/next page actions
 
 Keep the same actions, but make their labels and layout adapt to the current device mode.
+Do not persist the current mobile tray page.
+Support swipe-based page changes only from tray empty space in the Phaser layer; keep button-based page changes in the React controls.
 
 **Step 4: Run tests to verify they pass**
 

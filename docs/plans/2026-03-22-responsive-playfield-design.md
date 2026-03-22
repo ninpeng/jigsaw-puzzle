@@ -47,6 +47,9 @@
 - Tray as a bottom drawer
 - Drawer is collapsed by default
 - Opening the drawer reduces available board height and triggers a layout recompute
+- The mobile tray is a simple paged tray, not a free-scrolling list
+- Page changes support both explicit buttons and swipe gestures on tray empty space
+- Page changes are blocked while a piece is actively being dragged
 
 ### Mode Selection
 
@@ -73,6 +76,7 @@
 - The same session field is interpreted by device mode:
   - desktop/tablet: right tray collapsed or open
   - mobile: drawer collapsed or open
+- The current mobile tray page is UI-only state and is not persisted.
 
 ## Rendering Rules
 
@@ -82,6 +86,7 @@
 - The board preserves the image aspect ratio.
 - The faint image preview remains.
 - Piece outlines are drawn on top of the board surface as passive guidance.
+- Mobile layouts must preserve a minimum usable board height even when the drawer is open.
 
 ### Tray
 
@@ -89,6 +94,10 @@
 - Tray pieces are rendered into slots, not free pixel positions.
 - `자동 재정렬` becomes a slot-order operation.
 - `가장자리 분리` becomes a slot-order regrouping operation.
+- Desktop/tablet trays can show the full current slot grid.
+- Mobile trays show only the visible slots for the current page.
+- If mobile piece count exceeds what one page can show, additional pieces appear on later pages instead of forcing the drawer to keep growing.
+- Drawer growth is allowed only until the board minimum height would be violated.
 
 ### Piece Display Size
 
@@ -106,6 +115,7 @@
   - reproject loose board pieces from relative board positions
   - remap tray pieces by slot index
 - Fixed pieces always resolve to their home positions inside the recomputed board rect.
+- If the visible mobile page becomes invalid after resize, clamp it to the new page range.
 
 ## Migration
 
@@ -120,6 +130,7 @@
 - If a viewport is too small for the desktop/tablet layout, fall back to mobile mode.
 - If tray slot count changes after resize, preserve slot order and reflow pieces into the new slot grid.
 - If migration cannot confidently classify a piece, default it into the tray rather than risking overlap on the board.
+- Avoid free-scrolling tray content on mobile; overflow is handled by paging.
 
 ## Testing Scope
 
