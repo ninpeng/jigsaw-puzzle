@@ -1,4 +1,5 @@
 import 'fake-indexeddb/auto';
+import { openDB } from 'idb';
 
 import {
   DIFFICULTY_PRESETS,
@@ -9,7 +10,10 @@ import {
   savePuzzleSession,
   savePuzzleSource
 } from '../src/puzzle';
-import type { PuzzleSource } from '../src/puzzle';
+import type { PuzzleSession, PuzzleSource } from '../src/puzzle';
+
+const DATABASE_NAME = 'jigsaw-puzzle-db';
+const SESSION_STORE = 'sessions';
 
 const source: PuzzleSource = {
   id: 'upload-forest',
@@ -34,19 +38,110 @@ describe('puzzle storage', () => {
     await savePuzzleSession(session);
 
     const storage = await createStorage();
-    const storedSource = await storage.getSource(source.id);
-    const storedSession = await storage.getSession(session.id);
-    const summaries = await storage.listSessions();
+    try {
+      const storedSource = await storage.getSource(source.id);
+      const storedSession = await storage.getSession(session.id);
+      const summaries = await storage.listSessions();
 
-    expect(storedSource?.title).toBe('Forest');
-    expect(storedSession?.definition.id).toBe(definition.id);
-    expect(summaries).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: session.id,
-          completionRatio: 0
+      expect(storedSource?.title).toBe('Forest');
+      expect(storedSession?.definition.id).toBe(definition.id);
+      expect(summaries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: session.id,
+            completionRatio: 0
+          })
+        ])
+      );
+    } finally {
+      storage.close();
+    }
+  });
+
+  it('migrates legacy sessions with absolute piece positions on read', async () => {
+    const definition = createPuzzleDefinition(source, DIFFICULTY_PRESETS.medium);
+    const [boardPiece, trayPieceB, trayPieceA] = definition.pieces;
+    const legacySession = {
+      id: 'legacy-session',
+      definition,
+      pieces: [
+        {
+          ...boardPiece,
+          x: definition.board.x + 12,
+          y: definition.board.y + 16,
+          fixed: false
+        },
+        {
+          ...trayPieceB,
+          x: 980,
+          y: 120,
+          fixed: false
+        },
+        {
+          ...trayPieceA,
+          x: 40,
+          y: 420,
+          fixed: false
+        }
+      ],
+      startedAt: '2026-03-22T00:00:00.000Z',
+      lastUpdatedAt: '2026-03-22T00:00:00.000Z',
+      elapsedMs: 0,
+      completedAt: null,
+      assistActions: [],
+      trayCollapsed: false
+    } as PuzzleSession;
+
+    await savePuzzleSession(legacySession);
+
+    const storage = await createStorage();
+    const rawDb = await openDB(DATABASE_NAME, 1);
+    try {
+      const migrated = await storage.getSession(legacySession.id);
+      const storedSession = (await rawDb.get(SESSION_STORE, legacySession.id)) as
+        | PuzzleSession
+        | undefined;
+
+      expect(migrated).toBeDefined();
+      expect(migrated?.pieces[0]).toMatchObject({
+        zone: 'board',
+        traySlotIndex: null,
+        boardPosition: expect.objectContaining({
+          x: expect.any(Number),
+          y: expect.any(Number)
         })
-      ])
-    );
+      });
+      expect(migrated?.pieces[1]).toMatchObject({
+        zone: 'tray',
+        traySlotIndex: 0,
+        boardPosition: null
+      });
+      expect(migrated?.pieces[2]).toMatchObject({
+        zone: 'tray',
+        traySlotIndex: 1,
+        boardPosition: null
+      });
+      expect(storedSession?.pieces[0]).toMatchObject({
+        zone: 'board',
+        traySlotIndex: null,
+        boardPosition: expect.objectContaining({
+          x: expect.any(Number),
+          y: expect.any(Number)
+        })
+      });
+      expect(storedSession?.pieces[1]).toMatchObject({
+        zone: 'tray',
+        traySlotIndex: 0,
+        boardPosition: null
+      });
+      expect(storedSession?.pieces[2]).toMatchObject({
+        zone: 'tray',
+        traySlotIndex: 1,
+        boardPosition: null
+      });
+    } finally {
+      rawDb.close();
+      storage.close();
+    }
   });
 });
