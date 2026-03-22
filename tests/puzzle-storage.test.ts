@@ -1,5 +1,6 @@
 import 'fake-indexeddb/auto';
 import { openDB } from 'idb';
+import { vi } from 'vitest';
 
 import {
   DIFFICULTY_PRESETS,
@@ -61,6 +62,10 @@ describe('puzzle storage', () => {
   it('migrates legacy sessions with absolute piece positions on read', async () => {
     const definition = createPuzzleDefinition(source, DIFFICULTY_PRESETS.medium);
     const [boardPiece, trayPieceB, trayPieceA] = definition.pieces;
+    const expectedBoardPosition = {
+      x: 12 / definition.board.width,
+      y: 16 / definition.board.height
+    };
     const legacySession = {
       id: 'legacy-session',
       definition,
@@ -106,10 +111,7 @@ describe('puzzle storage', () => {
       expect(migrated?.pieces[0]).toMatchObject({
         zone: 'board',
         traySlotIndex: null,
-        boardPosition: expect.objectContaining({
-          x: expect.any(Number),
-          y: expect.any(Number)
-        })
+        boardPosition: expectedBoardPosition
       });
       expect(migrated?.pieces[1]).toMatchObject({
         zone: 'tray',
@@ -124,10 +126,7 @@ describe('puzzle storage', () => {
       expect(storedSession?.pieces[0]).toMatchObject({
         zone: 'board',
         traySlotIndex: null,
-        boardPosition: expect.objectContaining({
-          x: expect.any(Number),
-          y: expect.any(Number)
-        })
+        boardPosition: expectedBoardPosition
       });
       expect(storedSession?.pieces[1]).toMatchObject({
         zone: 'tray',
@@ -141,6 +140,55 @@ describe('puzzle storage', () => {
       });
     } finally {
       rawDb.close();
+      storage.close();
+    }
+  });
+
+  it('returns the migrated legacy session when write-back fails', async () => {
+    const definition = createPuzzleDefinition(source, DIFFICULTY_PRESETS.medium);
+    const legacySession = {
+      id: 'legacy-writeback-failure',
+      definition,
+      pieces: [
+        {
+          ...definition.pieces[0],
+          x: definition.board.x + 12,
+          y: definition.board.y + 16,
+          fixed: false
+        }
+      ],
+      startedAt: '2026-03-22T00:00:00.000Z',
+      lastUpdatedAt: '2026-03-22T00:00:00.000Z',
+      elapsedMs: 0,
+      completedAt: null,
+      assistActions: [],
+      trayCollapsed: false
+    } as unknown as PuzzleSession;
+
+    await savePuzzleSession(legacySession);
+
+    const storage = await createStorage();
+    const putError = new Error('write-back failed');
+    const putSpy = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(() => {
+      throw putError;
+    });
+
+    try {
+      await expect(storage.getSession(legacySession.id)).resolves.toMatchObject({
+        id: legacySession.id,
+        pieces: [
+          expect.objectContaining({
+            zone: 'board',
+            traySlotIndex: null,
+            boardPosition: {
+              x: 12 / definition.board.width,
+              y: 16 / definition.board.height
+            }
+          })
+        ]
+      });
+    } finally {
+      putSpy.mockRestore();
       storage.close();
     }
   });

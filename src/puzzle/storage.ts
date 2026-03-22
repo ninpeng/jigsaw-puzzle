@@ -144,7 +144,11 @@ export async function createStorage() {
       const migratedSession = migrateLegacySession(session);
 
       if (migratedSession !== session) {
-        await db.put(SESSION_STORE, migratedSession);
+        try {
+          await db.put(SESSION_STORE, migratedSession);
+        } catch {
+          // Best-effort migration: return the normalized session even if persistence fails.
+        }
       }
 
       return migratedSession;
