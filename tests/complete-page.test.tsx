@@ -26,7 +26,8 @@ const session: PuzzleSession = {
   lastUpdatedAt: '2026-03-13T00:00:00.000Z',
   elapsedMs: 42000,
   completedAt: '2026-03-13T00:01:00.000Z',
-  assistActions: [{ type: 'hint', timestamp: '2026-03-13T00:00:10.000Z' }]
+  assistActions: [{ type: 'hint', timestamp: '2026-03-13T00:00:10.000Z' }],
+  trayCollapsed: false
 };
 
 describe('CompletePage', () => {

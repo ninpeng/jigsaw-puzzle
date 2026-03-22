@@ -66,10 +66,18 @@ export interface AssistAction {
   pieceId?: string;
 }
 
+export type PieceZone = 'board' | 'tray';
+
 export interface PuzzlePieceState extends PuzzlePieceDefinition {
   x: number;
   y: number;
   fixed: boolean;
+  zone: PieceZone;
+  traySlotIndex: number | null;
+  boardPosition: {
+    x: number;
+    y: number;
+  } | null;
 }
 
 export interface PuzzleSession {
@@ -81,6 +89,7 @@ export interface PuzzleSession {
   elapsedMs: number;
   completedAt: string | null;
   assistActions: AssistAction[];
+  trayCollapsed: boolean;
 }
 
 export interface PuzzleSessionSummary {
