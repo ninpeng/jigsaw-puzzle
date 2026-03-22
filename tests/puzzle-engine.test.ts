@@ -60,7 +60,13 @@ describe('puzzle engine', () => {
     expect(closeResult.session.pieces[0]).toMatchObject({
       x: target.homeX,
       y: target.homeY,
-      fixed: true
+      fixed: true,
+      zone: 'board',
+      traySlotIndex: null,
+      boardPosition: {
+        x: target.homeX - definition.board.x,
+        y: target.homeY - definition.board.y
+      }
     });
 
     const farSession = createPuzzleSession(definition, { seed: 12 });
@@ -79,10 +85,18 @@ describe('puzzle engine', () => {
     const session = createPuzzleSession(definition, { seed: 12 });
 
     expect(session.trayCollapsed).toBe(false);
-    expect(session.pieces.every((piece) => piece.fixed || piece.zone === 'tray')).toBe(true);
+    expect(
+      session.pieces.every(
+        (piece, index) =>
+          piece.fixed ||
+          (piece.zone === 'tray' &&
+            piece.traySlotIndex === index &&
+            piece.boardPosition === null)
+      )
+    ).toBe(true);
   });
 
-  it('updates zone when a loose piece moves onto the board and snaps there', () => {
+  it('stores normalized board coordinates when a loose piece moves onto the board', () => {
     const definition = createPuzzleDefinition(builtInSource, DIFFICULTY_PRESETS.easy);
     const session = createPuzzleSession(definition, { seed: 12 });
     const target = session.pieces.find((piece) => !piece.fixed)!;
@@ -92,15 +106,29 @@ describe('puzzle engine', () => {
       y: target.homeY
     });
 
-    expect(movedSession.pieces.find((piece) => piece.id === target.id)?.zone).toBe('board');
+    expect(movedSession.pieces.find((piece) => piece.id === target.id)).toMatchObject({
+      zone: 'board',
+      traySlotIndex: null,
+      boardPosition: {
+        x: target.homeX - definition.board.x,
+        y: target.homeY - definition.board.y
+      }
+    });
 
     const snapResult = snapPieceToBoard(session, definition, target.id, {
       x: target.homeX + 8,
       y: target.homeY - 6
     });
 
-    expect(snapResult.session.pieces.find((piece) => piece.id === target.id)?.zone).toBe('board');
-    expect(snapResult.session.pieces.find((piece) => piece.id === target.id)?.fixed).toBe(true);
+    expect(snapResult.session.pieces.find((piece) => piece.id === target.id)).toMatchObject({
+      zone: 'board',
+      fixed: true,
+      traySlotIndex: null,
+      boardPosition: {
+        x: target.homeX - definition.board.x,
+        y: target.homeY - definition.board.y
+      }
+    });
   });
 
   it('moves only unfixed edge pieces into the assist tray', () => {
@@ -126,7 +154,13 @@ describe('puzzle engine', () => {
     const session = createPuzzleSession(definition, { seed: 22 });
 
     expect(
-      session.pieces.every((piece) => piece.zone === 'tray' && !piece.fixed)
+      session.pieces.every(
+        (piece, index) =>
+          piece.zone === 'tray' &&
+          !piece.fixed &&
+          piece.traySlotIndex === index &&
+          piece.boardPosition === null
+      )
     ).toBe(true);
   });
 

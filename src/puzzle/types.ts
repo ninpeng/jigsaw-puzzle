@@ -73,6 +73,11 @@ export interface PuzzlePieceState extends PuzzlePieceDefinition {
   y: number;
   fixed: boolean;
   zone: PieceZone;
+  traySlotIndex: number | null;
+  boardPosition: {
+    x: number;
+    y: number;
+  } | null;
 }
 
 export interface PuzzleSession {

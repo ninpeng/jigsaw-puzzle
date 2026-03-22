@@ -87,13 +87,57 @@ function buildTraySlots(definition: PuzzleDefinition, pieceCount: number): Point
   return [{ x: 24, y: 24 }];
 }
 
-function buildSessionPiece(definitionPiece: PuzzlePieceDefinition, slot: Point): PuzzlePieceState {
+function getBoardRelativePosition(definition: PuzzleDefinition, point: Point): Point {
+  return {
+    x: point.x - definition.board.x,
+    y: point.y - definition.board.y
+  };
+}
+
+function isPointInsideBoard(definition: PuzzleDefinition, point: Point): boolean {
+  return (
+    point.x >= definition.board.x &&
+    point.x <= definition.board.x + definition.board.width - definition.pieceWidth &&
+    point.y >= definition.board.y &&
+    point.y <= definition.board.y + definition.board.height - definition.pieceHeight
+  );
+}
+
+function buildSessionPiece(
+  definitionPiece: PuzzlePieceDefinition,
+  slot: Point,
+  traySlotIndex: number
+): PuzzlePieceState {
   return {
     ...definitionPiece,
     x: slot.x,
     y: slot.y,
     fixed: false,
-    zone: 'tray'
+    zone: 'tray',
+    traySlotIndex,
+    boardPosition: null
+  };
+}
+
+function setTrayPlacement(piece: PuzzlePieceState, slotIndex: number | null, point: Point): PuzzlePieceState {
+  return {
+    ...piece,
+    x: point.x,
+    y: point.y,
+    zone: 'tray',
+    traySlotIndex: slotIndex,
+    boardPosition: null
+  };
+}
+
+function setBoardPlacement(piece: PuzzlePieceState, definition: PuzzleDefinition, point: Point): PuzzlePieceState {
+  return {
+    ...piece,
+    x: point.x,
+    y: point.y,
+    zone: 'board',
+    traySlotIndex: null,
+    boardPosition: getBoardRelativePosition(definition, point)
   };
 }
 
@@ -171,7 +215,7 @@ export function createPuzzleSession(definition: PuzzleDefinition, options: Sessi
     id: `session-${definition.id}-${timestamp}`,
     definition,
     pieces: definition.pieces.map((piece, index) =>
-      buildSessionPiece(piece, traySlots[index] ?? traySlots[traySlots.length - 1])
+      buildSessionPiece(piece, traySlots[index] ?? traySlots[traySlots.length - 1], index)
     ),
     startedAt: timestamp,
     lastUpdatedAt: timestamp,
@@ -190,15 +234,11 @@ export function updatePiecePosition(session: PuzzleSession, pieceId: string, poi
     return session;
   }
 
-  piece.x = point.x;
-  piece.y = point.y;
-  piece.zone =
-    point.x >= nextSession.definition.board.x &&
-    point.x <= nextSession.definition.board.x + nextSession.definition.board.width - nextSession.definition.pieceWidth &&
-    point.y >= nextSession.definition.board.y &&
-    point.y <= nextSession.definition.board.y + nextSession.definition.board.height - nextSession.definition.pieceHeight
-      ? 'board'
-      : 'tray';
+  const placement = isPointInsideBoard(nextSession.definition, point)
+    ? setBoardPlacement(piece, nextSession.definition, point)
+    : setTrayPlacement(piece, piece.traySlotIndex, point);
+
+  Object.assign(piece, placement);
   nextSession.lastUpdatedAt = nowIso();
   return nextSession;
 }
@@ -225,10 +265,10 @@ export function snapPieceToBoard(
     return { didSnap: false, session: movedSession };
   }
 
-  piece.x = piece.homeX;
-  piece.y = piece.homeY;
-  piece.fixed = true;
-  piece.zone = 'board';
+  Object.assign(piece, {
+    ...setBoardPlacement(piece, definition, { x: piece.homeX, y: piece.homeY }),
+    fixed: true
+  });
   movedSession.completedAt = movedSession.pieces.every((candidate) => candidate.fixed)
     ? nowIso()
     : null;
@@ -261,14 +301,18 @@ export function separateEdgePieces(session: PuzzleSession, definition: PuzzleDef
       return piece;
     }
 
-    const arrangedPiece = {
-      ...piece,
+    const arrangedPiece = setTrayPlacement(piece, columnIndex, {
       x: 28 + (columnIndex % 7) * (definition.pieceWidth + 12),
       y: trayTop + Math.floor(columnIndex / 7) * (definition.pieceHeight + 12)
+    });
+
+    const positionedPiece = {
+      ...piece,
+      ...arrangedPiece
     };
 
     columnIndex += 1;
-    return arrangedPiece;
+    return positionedPiece;
   });
 
   nextSession.assistActions.push({
