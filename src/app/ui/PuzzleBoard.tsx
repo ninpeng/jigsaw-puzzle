@@ -5,6 +5,9 @@ import { snapPieceToBoard, type PuzzlePieceState, type PuzzleSession } from '../
 import { resolveBoardDragEndSounds } from '../audio/boardSound';
 import type { SoundId } from '../audio/soundRegistry';
 
+const BOARD_WIDTH = 1180;
+const BOARD_HEIGHT = 760;
+
 interface PuzzleBoardProps {
   session: PuzzleSession;
   highlightedPieceId: string | null;
@@ -404,8 +407,8 @@ export function PuzzleBoard({
     const scene = new PuzzleBoardScene(session, onSessionChange, onPlaySound);
     const game = new Phaser.Game({
       type: Phaser.CANVAS,
-      width: 1180,
-      height: 760,
+      width: BOARD_WIDTH,
+      height: BOARD_HEIGHT,
       parent: hostRef.current,
       transparent: true,
       backgroundColor: '#f7edd8',
@@ -431,7 +434,14 @@ export function PuzzleBoard({
   }, [highlightedPieceId]);
 
   useEffect(() => {
-    void viewportSize;
+    const game = gameRef.current;
+
+    if (!game || !viewportSize?.width || !viewportSize?.height) {
+      return;
+    }
+
+    const scale = Math.min(viewportSize.width / BOARD_WIDTH, viewportSize.height / BOARD_HEIGHT);
+    game.scale.setZoom(scale > 0 ? scale : 1);
   }, [viewportSize]);
 
   return <div ref={hostRef} className="board-frame" />;
