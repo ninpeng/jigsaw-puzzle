@@ -27,6 +27,50 @@ describe('puzzle layout', () => {
     });
 
     expect(layout.mode).toBe('mobile');
+    expect(layout.tray.rect.height).toBe(64);
     expect(layout.tray.rect.y).toBeGreaterThan(layout.board.rect.y);
+  });
+
+  it('keeps desktop tray slots inside the tray rectangle', () => {
+    const layout = buildPlayLayout({
+      width: 1366,
+      height: 900,
+      trayCollapsed: false,
+      pieceCount: 48,
+      imageWidth: 1600,
+      imageHeight: 900
+    });
+
+    expect(
+      layout.tray.slots.every(
+        (slot) =>
+          slot.x >= layout.tray.rect.x &&
+          slot.y >= layout.tray.rect.y &&
+          slot.x + slot.width <= layout.tray.rect.x + layout.tray.rect.width &&
+          slot.y + slot.height <= layout.tray.rect.y + layout.tray.rect.height
+      )
+    ).toBe(true);
+  });
+
+  it('keeps mobile tray slots inside the drawer rectangle', () => {
+    const layout = buildPlayLayout({
+      width: 390,
+      height: 844,
+      trayCollapsed: false,
+      pieceCount: 24,
+      imageWidth: 1600,
+      imageHeight: 900
+    });
+
+    expect(layout.tray.rect.height).toBe(188);
+    expect(
+      layout.tray.slots.every(
+        (slot) =>
+          slot.x >= layout.tray.rect.x &&
+          slot.y >= layout.tray.rect.y &&
+          slot.x + slot.width <= layout.tray.rect.x + layout.tray.rect.width &&
+          slot.y + slot.height <= layout.tray.rect.y + layout.tray.rect.height
+      )
+    ).toBe(true);
   });
 });

@@ -106,9 +106,9 @@ function buildMobileLayout(input: BuildPlayLayoutInput, boardAspect: number): Pl
 
   const trayRect = {
     x: SAFE_MARGIN,
-    y: boardRect.y + boardRect.height + GAP,
+    y: input.height - SAFE_MARGIN - trayHeight,
     width: input.width - SAFE_MARGIN * 2,
-    height: Math.max(TRAY_COLLAPSED_WIDTH, input.height - (boardRect.y + boardRect.height + GAP) - SAFE_MARGIN)
+    height: trayHeight
   };
 
   return {
@@ -138,11 +138,41 @@ function fitRect(maxWidth: number, maxHeight: number, aspect: number): { width: 
 }
 
 function buildTraySlots(trayRect: LayoutRect, pieceCount: number): LayoutRect[] {
+  if (pieceCount <= 0) {
+    return [];
+  }
+
+  const idealColumns = clamp(
+    Math.round(Math.sqrt((pieceCount * trayRect.width) / Math.max(1, trayRect.height))),
+    1,
+    pieceCount
+  );
+  const candidateColumns = orderedColumnCandidates(idealColumns, pieceCount);
+
+  for (const columns of candidateColumns) {
+    const rows = Math.max(1, Math.ceil(pieceCount / columns));
+    const slotWidth = Math.floor((trayRect.width - GAP * (columns + 1)) / columns);
+    const slotHeight = Math.floor((trayRect.height - GAP * (rows + 1)) / rows);
+    const slotSize = Math.min(slotWidth, slotHeight);
+
+    if (slotSize < 24) {
+      continue;
+    }
+
+    return buildSlots(trayRect, pieceCount, columns, rows, slotSize);
+  }
+
+  return buildSlots(trayRect, pieceCount, 1, pieceCount, Math.max(24, Math.min(trayRect.width, trayRect.height) - GAP * 2));
+}
+
+function buildSlots(
+  trayRect: LayoutRect,
+  pieceCount: number,
+  columns: number,
+  rows: number,
+  slotSize: number
+): LayoutRect[] {
   const slots: LayoutRect[] = [];
-  const slotWidth = Math.max(48, Math.floor((trayRect.width - GAP * 2) / 2));
-  const slotHeight = slotWidth;
-  const columns = Math.max(1, Math.floor((trayRect.width - GAP) / (slotWidth + GAP)));
-  const rows = Math.max(1, Math.ceil(pieceCount / columns));
 
   for (let row = 0; row < rows; row += 1) {
     for (let col = 0; col < columns; col += 1) {
@@ -151,13 +181,36 @@ function buildTraySlots(trayRect: LayoutRect, pieceCount: number): LayoutRect[] 
       }
 
       slots.push({
-        x: trayRect.x + GAP + col * (slotWidth + GAP),
-        y: trayRect.y + GAP + row * (slotHeight + GAP),
-        width: slotWidth,
-        height: slotHeight
+        x: trayRect.x + GAP + col * (slotSize + GAP),
+        y: trayRect.y + GAP + row * (slotSize + GAP),
+        width: slotSize,
+        height: slotSize
       });
     }
   }
 
   return slots;
+}
+
+function orderedColumnCandidates(center: number, pieceCount: number): number[] {
+  const candidates: number[] = [];
+
+  for (let offset = 0; offset < pieceCount; offset += 1) {
+    const lower = center - offset;
+    const upper = center + offset;
+
+    if (lower >= 1 && !candidates.includes(lower)) {
+      candidates.push(lower);
+    }
+
+    if (upper <= pieceCount && upper !== lower && !candidates.includes(upper)) {
+      candidates.push(upper);
+    }
+  }
+
+  return candidates;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
