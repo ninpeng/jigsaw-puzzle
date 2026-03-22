@@ -55,6 +55,33 @@ const mockSession: PuzzleSession = {
   trayCollapsed: false
 };
 
+function setWindowSize(width: number, height: number) {
+  Object.defineProperty(window, 'innerWidth', {
+    configurable: true,
+    value: width
+  });
+  Object.defineProperty(window, 'innerHeight', {
+    configurable: true,
+    value: height
+  });
+}
+
+function setPointerMode(isCoarse: boolean) {
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches: query === '(pointer: coarse)' ? isCoarse : false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn()
+    }))
+  });
+}
+
 vi.mock('../src/puzzle', async () => {
   const actual = await vi.importActual<typeof import('../src/puzzle')>('../src/puzzle');
 
@@ -97,14 +124,7 @@ describe('PlayPage', () => {
   });
 
   it('locks the board panel height to the window viewport instead of content growth', async () => {
-    Object.defineProperty(window, 'innerWidth', {
-      configurable: true,
-      value: 1280
-    });
-    Object.defineProperty(window, 'innerHeight', {
-      configurable: true,
-      value: 900
-    });
+    setWindowSize(1280, 900);
 
     render(
       <MemoryRouter initialEntries={['/play/session-play-page']}>
@@ -115,6 +135,61 @@ describe('PlayPage', () => {
     );
 
     expect(await screen.findByTestId('board-panel')).toHaveStyle({ height: '844px' });
+  });
+
+  it('blocks portrait mobile play and asks the user to rotate the device', async () => {
+    setWindowSize(390, 844);
+    setPointerMode(true);
+
+    render(
+      <MemoryRouter initialEntries={['/play/session-play-page']}>
+        <Routes>
+          <Route path="/play/:sessionId" element={<PlayPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('가로 모드로 돌려주세요.')).toBeInTheDocument();
+    expect(screen.queryByTestId('play-viewport')).not.toBeInTheDocument();
+  });
+
+  it('allows coarse-pointer landscape play without showing the rotate guard', async () => {
+    setWindowSize(844, 390);
+    setPointerMode(true);
+
+    render(
+      <MemoryRouter initialEntries={['/play/session-play-page']}>
+        <Routes>
+          <Route path="/play/:sessionId" element={<PlayPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByTestId('play-viewport')).toBeInTheDocument();
+    expect(screen.queryByText('가로 모드로 돌려주세요.')).not.toBeInTheDocument();
+  });
+
+  it('removes the rotate guard after resizing from portrait mobile to landscape', async () => {
+    setWindowSize(390, 844);
+    setPointerMode(true);
+
+    render(
+      <MemoryRouter initialEntries={['/play/session-play-page']}>
+        <Routes>
+          <Route path="/play/:sessionId" element={<PlayPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('가로 모드로 돌려주세요.')).toBeInTheDocument();
+
+    setWindowSize(844, 390);
+    fireEvent(window, new Event('resize'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('play-viewport')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('가로 모드로 돌려주세요.')).not.toBeInTheDocument();
   });
 
   it('renders the play board inside a responsive full-size container', async () => {

@@ -26,12 +26,25 @@ const COMPACT_PAGE_PADDING = 16;
 const COMPACT_PAGE_BREAKPOINT = 720;
 const BOARD_PANEL_PADDING = 14;
 const MIN_BOARD_PANEL_HEIGHT = 360;
+const MOBILE_PORTRAIT_GUARD_MAX_WIDTH = 720;
 
 function resolveBoardPanelHeight(windowWidth: number, windowHeight: number) {
   const shellPadding =
     windowWidth <= COMPACT_PAGE_BREAKPOINT ? COMPACT_PAGE_PADDING : DEFAULT_PAGE_PADDING;
 
   return Math.max(MIN_BOARD_PANEL_HEIGHT, windowHeight - shellPadding * 2);
+}
+
+function shouldBlockPortraitPlay(windowWidth: number, windowHeight: number) {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return false;
+  }
+
+  return (
+    window.matchMedia('(pointer: coarse)').matches &&
+    windowWidth <= MOBILE_PORTRAIT_GUARD_MAX_WIDTH &&
+    windowHeight > windowWidth
+  );
 }
 
 function makeSourceFromSession(session: PuzzleSession): PuzzleSource {
@@ -56,6 +69,11 @@ export function PlayPage() {
       ? 0
       : resolveBoardPanelHeight(window.innerWidth, window.innerHeight)
   );
+  const [portraitGuardActive, setPortraitGuardActive] = useState(() =>
+    typeof window === 'undefined'
+      ? false
+      : shouldBlockPortraitPlay(window.innerWidth, window.innerHeight)
+  );
   const [playViewportSize, setPlayViewportSize] = useState({ width: 0, height: 0 });
   const [highlightedPieceId, setHighlightedPieceId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +86,24 @@ export function PlayPage() {
   const playViewportRef = useRef<HTMLDivElement | null>(null);
   const saveTimeoutRef = useRef<number | null>(null);
   const completionHandledRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+
+    const updateWindowLayout = () => {
+      setBoardPanelHeight(resolveBoardPanelHeight(window.innerWidth, window.innerHeight));
+      setPortraitGuardActive(shouldBlockPortraitPlay(window.innerWidth, window.innerHeight));
+    };
+
+    updateWindowLayout();
+    window.addEventListener('resize', updateWindowLayout);
+
+    return () => {
+      window.removeEventListener('resize', updateWindowLayout);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -204,7 +240,7 @@ export function PlayPage() {
   }, [trayPageCount]);
 
   useEffect(() => {
-    if (!loaded || !session) {
+    if (!loaded || !session || portraitGuardActive) {
       return undefined;
     }
 
@@ -217,17 +253,8 @@ export function PlayPage() {
     }
 
     const updateViewportSize = () => {
-      const nextPanelHeight = resolveBoardPanelHeight(window.innerWidth, window.innerHeight);
       const nextWidth = Math.round(viewport.getBoundingClientRect().width);
-      const nextHeight = Math.max(1, nextPanelHeight - BOARD_PANEL_PADDING * 2);
-
-      setBoardPanelHeight((current) => {
-        if (current === nextPanelHeight) {
-          return current;
-        }
-
-        return nextPanelHeight;
-      });
+      const nextHeight = Math.max(1, boardPanelHeight - BOARD_PANEL_PADDING * 2);
 
       setPlayViewportSize((current) => {
         if (current.width === nextWidth && current.height === nextHeight) {
@@ -239,12 +266,9 @@ export function PlayPage() {
     };
 
     updateViewportSize();
-    window.addEventListener('resize', updateViewportSize);
 
     if (typeof ResizeObserver === 'undefined') {
-      return () => {
-        window.removeEventListener('resize', updateViewportSize);
-      };
+      return undefined;
     }
 
     const observer = new ResizeObserver(() => {
@@ -256,9 +280,8 @@ export function PlayPage() {
 
     return () => {
       observer.disconnect();
-      window.removeEventListener('resize', updateViewportSize);
     };
-  }, [loaded, session]);
+  }, [boardPanelHeight, loaded, portraitGuardActive, session]);
 
   const completionRatio = useMemo(() => {
     if (!session) {
@@ -278,6 +301,46 @@ export function PlayPage() {
     return (
       <main className="loading-shell">
         <p>{error ?? '퍼즐을 찾을 수 없습니다.'}</p>
+      </main>
+    );
+  }
+
+  if (portraitGuardActive) {
+    return (
+      <main className="rotation-shell">
+        <section className="rotation-card">
+          <span className="eyebrow">Landscape Only</span>
+          <h1>가로 모드로 돌려주세요.</h1>
+          <p>
+            모바일 플레이는 가로 화면만 지원합니다. 기기를 돌리면 더 넓은 보드와 트레이를
+            안정적으로 사용할 수 있습니다.
+          </p>
+          <div className="rotation-actions">
+            <button
+              type="button"
+              className="accent-button"
+              onClick={() => {
+                void play('ui_click');
+                navigate('/');
+              }}
+            >
+              홈으로
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              aria-label={enabled ? '사운드 켜짐' : '사운드 꺼짐'}
+              onClick={() => {
+                if (enabled) {
+                  void play('ui_click');
+                }
+                toggleEnabled();
+              }}
+            >
+              {enabled ? '사운드 ON' : '사운드 OFF'}
+            </button>
+          </div>
+        </section>
       </main>
     );
   }
