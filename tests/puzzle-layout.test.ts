@@ -66,7 +66,7 @@ describe('puzzle layout', () => {
     ).toBe(true);
   });
 
-  it('keeps dense mobile tray slots inside the drawer rectangle', () => {
+  it('keeps dense mobile tray slots inside the drawer rectangle and above the minimum size', () => {
     const layout = buildPlayLayout({
       width: 390,
       height: 844,
@@ -76,14 +76,16 @@ describe('puzzle layout', () => {
       imageHeight: 900
     });
 
-    expect(layout.tray.rect.height).toBe(188);
+    expect(layout.tray.rect.height).toBeGreaterThan(188);
     expect(
       layout.tray.slots.every(
         (slot) =>
           slot.x >= layout.tray.rect.x &&
           slot.y >= layout.tray.rect.y &&
           slot.x + slot.width <= layout.tray.rect.x + layout.tray.rect.width &&
-          slot.y + slot.height <= layout.tray.rect.y + layout.tray.rect.height
+          slot.y + slot.height <= layout.tray.rect.y + layout.tray.rect.height &&
+          slot.width >= 20 &&
+          slot.height >= 20
       )
     ).toBe(true);
   });
