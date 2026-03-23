@@ -14,25 +14,45 @@ import {
 } from '../../puzzle';
 import { useSound } from '../audio/SoundProvider';
 import { CompletePage } from './CompletePage';
-import { PlaySidebar } from './PlaySidebar';
+import { PlayHud } from './PlayHud';
 
 const PuzzleBoard = lazy(async () => {
   const module = await import('../ui/PuzzleBoard');
   return { default: module.PuzzleBoard };
 });
 
-const DEFAULT_PAGE_PADDING = 28;
-const COMPACT_PAGE_PADDING = 16;
-const COMPACT_PAGE_BREAKPOINT = 720;
-const BOARD_PANEL_PADDING = 14;
+const DEFAULT_PAGE_PADDING = 18;
+const COMPACT_PAGE_PADDING = 12;
+const COMPACT_PAGE_BREAKPOINT = 960;
+const BOARD_PANEL_PADDING = 10;
+const PLAY_SHELL_GAP = 12;
+const DEFAULT_HUD_HEIGHT = 86;
+const STACKED_HUD_HEIGHT = 110;
+const COMPACT_HUD_HEIGHT = 126;
+const STACKED_HUD_BREAKPOINT = 1200;
 const MIN_BOARD_PANEL_HEIGHT = 360;
-const MOBILE_PORTRAIT_GUARD_MAX_WIDTH = 720;
 
-function resolveBoardPanelHeight(windowWidth: number, windowHeight: number) {
+function resolveHudReserveHeight(windowWidth: number) {
+  if (windowWidth <= COMPACT_PAGE_BREAKPOINT) {
+    return COMPACT_HUD_HEIGHT;
+  }
+
+  if (windowWidth <= STACKED_HUD_BREAKPOINT) {
+    return STACKED_HUD_HEIGHT;
+  }
+
+  return DEFAULT_HUD_HEIGHT;
+}
+
+function resolveBoardPanelHeight(windowWidth: number, windowHeight: number, hudHeight?: number) {
   const shellPadding =
     windowWidth <= COMPACT_PAGE_BREAKPOINT ? COMPACT_PAGE_PADDING : DEFAULT_PAGE_PADDING;
+  const reservedHudHeight = hudHeight ?? resolveHudReserveHeight(windowWidth);
 
-  return Math.max(MIN_BOARD_PANEL_HEIGHT, windowHeight - shellPadding * 2);
+  return Math.max(
+    MIN_BOARD_PANEL_HEIGHT,
+    windowHeight - shellPadding * 2 - PLAY_SHELL_GAP - reservedHudHeight
+  );
 }
 
 function shouldBlockPortraitPlay(windowWidth: number, windowHeight: number) {
@@ -40,11 +60,16 @@ function shouldBlockPortraitPlay(windowWidth: number, windowHeight: number) {
     return false;
   }
 
-  return (
-    window.matchMedia('(pointer: coarse)').matches &&
-    windowWidth <= MOBILE_PORTRAIT_GUARD_MAX_WIDTH &&
-    windowHeight > windowWidth
-  );
+  return window.matchMedia('(pointer: coarse)').matches && windowHeight > windowWidth;
+}
+
+function toAbsoluteRectStyle(rect: { x: number; y: number; width: number; height: number }) {
+  return {
+    left: `${rect.x}px`,
+    top: `${rect.y}px`,
+    width: `${rect.width}px`,
+    height: `${rect.height}px`
+  };
 }
 
 function makeSourceFromSession(session: PuzzleSession): PuzzleSource {
@@ -67,7 +92,11 @@ export function PlayPage() {
   const [boardPanelHeight, setBoardPanelHeight] = useState(() =>
     typeof window === 'undefined'
       ? 0
-      : resolveBoardPanelHeight(window.innerWidth, window.innerHeight)
+      : resolveBoardPanelHeight(
+          window.innerWidth,
+          window.innerHeight,
+          resolveHudReserveHeight(window.innerWidth)
+        )
   );
   const [portraitGuardActive, setPortraitGuardActive] = useState(() =>
     typeof window === 'undefined'
@@ -80,8 +109,10 @@ export function PlayPage() {
   const [loaded, setLoaded] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [currentTrayPage, setCurrentTrayPage] = useState(0);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [referenceOpen, setReferenceOpen] = useState(false);
   const lastTickRef = useRef<number | null>(null);
-  const playShellRef = useRef<HTMLElement | null>(null);
+  const hudRef = useRef<HTMLElement | null>(null);
   const boardPanelRef = useRef<HTMLElement | null>(null);
   const playViewportRef = useRef<HTMLDivElement | null>(null);
   const saveTimeoutRef = useRef<number | null>(null);
@@ -93,7 +124,10 @@ export function PlayPage() {
     }
 
     const updateWindowLayout = () => {
-      setBoardPanelHeight(resolveBoardPanelHeight(window.innerWidth, window.innerHeight));
+      const nextHudHeight =
+        hudRef.current?.getBoundingClientRect().height ?? resolveHudReserveHeight(window.innerWidth);
+
+      setBoardPanelHeight(resolveBoardPanelHeight(window.innerWidth, window.innerHeight, nextHudHeight));
       setPortraitGuardActive(shouldBlockPortraitPlay(window.innerWidth, window.innerHeight));
     };
 
@@ -104,6 +138,39 @@ export function PlayPage() {
       window.removeEventListener('resize', updateWindowLayout);
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof ResizeObserver === 'undefined' || !hudRef.current) {
+      return undefined;
+    }
+
+    const observer = new ResizeObserver(() => {
+      const nextHudHeight = hudRef.current?.getBoundingClientRect().height;
+
+      if (!nextHudHeight) {
+        return;
+      }
+
+      setBoardPanelHeight(resolveBoardPanelHeight(window.innerWidth, window.innerHeight, nextHudHeight));
+    });
+
+    observer.observe(hudRef.current);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [loaded, portraitGuardActive]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || portraitGuardActive || !hudRef.current) {
+      return;
+    }
+
+    const nextHudHeight =
+      hudRef.current.getBoundingClientRect().height || resolveHudReserveHeight(window.innerWidth);
+
+    setBoardPanelHeight(resolveBoardPanelHeight(window.innerWidth, window.innerHeight, nextHudHeight));
+  }, [loaded, portraitGuardActive, session, toolsOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -244,11 +311,10 @@ export function PlayPage() {
       return undefined;
     }
 
-    const shell = playShellRef.current;
     const boardPanel = boardPanelRef.current;
     const viewport = playViewportRef.current;
 
-    if (!shell || !boardPanel || !viewport) {
+    if (!boardPanel || !viewport) {
       return undefined;
     }
 
@@ -275,7 +341,6 @@ export function PlayPage() {
       updateViewportSize();
     });
 
-    observer.observe(shell);
     observer.observe(boardPanel);
 
     return () => {
@@ -292,6 +357,48 @@ export function PlayPage() {
       session.pieces.filter((piece) => piece.fixed).length / Math.max(1, session.pieces.length)
     );
   }, [session]);
+
+  useEffect(() => {
+    const gameWindow = window as Window & {
+      render_game_to_text?: () => string;
+      advanceTime?: (ms: number) => void;
+    };
+
+    gameWindow.render_game_to_text = () =>
+      JSON.stringify({
+        mode: portraitGuardActive ? 'rotation-guard' : 'play',
+        sessionId,
+        sourceTitle: session?.definition.sourceTitle ?? null,
+        trayCollapsed: session?.trayCollapsed ?? null,
+        trayPage: currentTrayPage,
+        trayPageCount,
+        referenceOpen,
+        toolsOpen,
+        completionRatio: Number(completionRatio.toFixed(3)),
+        viewport: playViewportSize,
+        board: playLayout?.board.rect ?? null
+      });
+
+    gameWindow.advanceTime = (ms: number) => {
+      setElapsedMs((current) => current + Math.max(0, ms));
+    };
+
+    return () => {
+      delete gameWindow.render_game_to_text;
+      delete gameWindow.advanceTime;
+    };
+  }, [
+    completionRatio,
+    currentTrayPage,
+    playLayout,
+    playViewportSize,
+    portraitGuardActive,
+    referenceOpen,
+    session,
+    sessionId,
+    toolsOpen,
+    trayPageCount
+  ]);
 
   if (!loaded) {
     return <main className="loading-shell">퍼즐을 준비하고 있습니다...</main>;
@@ -346,15 +453,13 @@ export function PlayPage() {
   }
 
   return (
-    <main ref={playShellRef} className="play-shell">
-      <PlaySidebar
+    <main className="play-shell">
+      <PlayHud
+        ref={hudRef}
         session={session}
         completionRatio={completionRatio}
         elapsedMs={elapsedMs}
         soundEnabled={enabled}
-        trayCollapsed={session.trayCollapsed}
-        trayPage={currentTrayPage}
-        trayPageCount={trayPageCount}
         onHint={() => {
           void play('hint');
           const hintResult = createHint(session);
@@ -364,35 +469,31 @@ export function PlayPage() {
             elapsedMs
           });
         }}
-        onSeparateEdges={() => {
-          void play('separate_edges');
-          setSession({
-            ...separateEdgePieces(session, session.definition),
-            elapsedMs
-          });
-        }}
         onGoHome={() => {
           void play('ui_click');
           navigate('/');
-        }}
-        onToggleTrayCollapsed={() => {
-          setSession({
-            ...session,
-            trayCollapsed: !session.trayCollapsed,
-            elapsedMs
-          });
-        }}
-        onPreviousTrayPage={() => {
-          setCurrentTrayPage((current) => Math.max(0, current - 1));
-        }}
-        onNextTrayPage={() => {
-          setCurrentTrayPage((current) => Math.min(Math.max(0, trayPageCount - 1), current + 1));
         }}
         onToggleSound={() => {
           if (enabled) {
             void play('ui_click');
           }
           toggleEnabled();
+        }}
+        toolsOpen={toolsOpen}
+        onToggleTools={() => {
+          setToolsOpen((current) => !current);
+        }}
+        onSeparateEdges={() => {
+          void play('separate_edges');
+          setToolsOpen(false);
+          setSession({
+            ...separateEdgePieces(session, session.definition),
+            elapsedMs
+          });
+        }}
+        onToggleReference={() => {
+          setToolsOpen(false);
+          setReferenceOpen((current) => !current);
         }}
       />
       <section
@@ -424,6 +525,85 @@ export function PlayPage() {
               }}
             />
           </Suspense>
+          {playLayout ? (
+            <>
+              <div
+                className={`tray-handle ${session.trayCollapsed ? 'is-collapsed' : ''}`}
+                data-testid="tray-handle"
+                style={toAbsoluteRectStyle(playLayout.tray.handleRect)}
+              >
+                <button
+                  type="button"
+                  className="tray-handle-button"
+                  aria-label={session.trayCollapsed ? '트레이 열기' : '트레이 접기'}
+                  onClick={() => {
+                    setSession({
+                      ...session,
+                      trayCollapsed: !session.trayCollapsed,
+                      elapsedMs
+                    });
+                  }}
+                >
+                  {session.trayCollapsed ? '⟨' : '⟩'}
+                </button>
+              </div>
+              {!session.trayCollapsed && trayPageCount > 1 ? (
+                <div className="tray-page-dock" style={toAbsoluteRectStyle(playLayout.tray.rect)}>
+                  <div className="tray-page-status">
+                    <span>트레이 페이지</span>
+                    <strong>
+                      {currentTrayPage + 1} / {trayPageCount}
+                    </strong>
+                  </div>
+                  <div className="tray-page-actions">
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      onClick={() => {
+                        setCurrentTrayPage((current) => Math.max(0, current - 1));
+                      }}
+                      disabled={currentTrayPage <= 0}
+                    >
+                      이전 페이지
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      onClick={() => {
+                        setCurrentTrayPage((current) =>
+                          Math.min(Math.max(0, trayPageCount - 1), current + 1)
+                        );
+                      }}
+                      disabled={currentTrayPage >= trayPageCount - 1}
+                    >
+                      다음 페이지
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </>
+          ) : null}
+          {referenceOpen ? (
+            <aside className="reference-popover">
+              <div className="reference-popover-header">
+                <strong>원본 보기</strong>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  aria-label="원본 보기 닫기"
+                  onClick={() => {
+                    setReferenceOpen(false);
+                  }}
+                >
+                  닫기
+                </button>
+              </div>
+              <img
+                src={session.definition.thumbnailDataUrl}
+                alt={`${session.definition.sourceTitle} reference`}
+              />
+            </aside>
+          ) : null}
         </div>
       </section>
     </main>

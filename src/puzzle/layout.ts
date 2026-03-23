@@ -15,6 +15,7 @@ export interface PlayLayout {
   board: { rect: LayoutRect };
   tray: {
     rect: LayoutRect;
+    handleRect: LayoutRect;
     slots: LayoutRect[];
     collapsed: boolean;
     pageSize: number;
@@ -29,12 +30,17 @@ export interface BuildPlayLayoutInput extends PlayViewport {
   imageHeight: number;
 }
 
-const SAFE_MARGIN = 24;
-const GAP = 16;
+const SAFE_MARGIN = 14;
+const GAP = 14;
 const DESKTOP_MIN_WIDTH = 1024;
 const TABLET_MIN_WIDTH = 640;
-const TRAY_OPEN_WIDTH_RATIO = 0.26;
-const TRAY_COLLAPSED_WIDTH = 64;
+const TRAY_HANDLE_WIDTH = 28;
+const DESKTOP_TRAY_MIN_WIDTH = 188;
+const DESKTOP_TRAY_MAX_WIDTH = 248;
+const TABLET_TRAY_MIN_WIDTH = 168;
+const TABLET_TRAY_MAX_WIDTH = 220;
+const TRAY_COLLAPSED_WIDTH = TRAY_HANDLE_WIDTH;
+const MOBILE_TRAY_COLLAPSED_HEIGHT = 64;
 const TRAY_DRAWER_HEIGHT = 188;
 const MIN_MOBILE_BOARD_HEIGHT = 180;
 const WIDE_TRAY_COLUMNS = 4;
@@ -70,15 +76,17 @@ function buildWideLayout(
   boardAspect: number,
   mode: Exclude<PlayLayout['mode'], 'mobile'>
 ): PlayLayout {
-  const trayWidth = input.trayCollapsed
-    ? TRAY_COLLAPSED_WIDTH
-    : Math.max(220, Math.round(input.width * TRAY_OPEN_WIDTH_RATIO));
+  const trayOpenWidth = resolveWideTrayWidth(input.width, mode);
+  const trayWidth = input.trayCollapsed ? TRAY_COLLAPSED_WIDTH : trayOpenWidth;
   const availableWidth = Math.max(320, input.width - SAFE_MARGIN * 2 - GAP - trayWidth);
   const availableHeight = Math.max(320, input.height - SAFE_MARGIN * 2);
   const boardSize = fitRect(availableWidth, availableHeight, boardAspect);
+  const groupWidth = boardSize.width + GAP + trayWidth;
+  const groupOffsetX = Math.max(0, Math.floor((input.width - SAFE_MARGIN * 2 - groupWidth) / 2));
+  const boardX = SAFE_MARGIN + groupOffsetX;
 
   const boardRect = {
-    x: SAFE_MARGIN,
+    x: boardX,
     y: SAFE_MARGIN + Math.max(0, Math.floor((availableHeight - boardSize.height) / 2)),
     width: boardSize.width,
     height: boardSize.height
@@ -87,8 +95,14 @@ function buildWideLayout(
   const trayRect = {
     x: boardRect.x + boardRect.width + GAP,
     y: SAFE_MARGIN,
-    width: input.width - (boardRect.x + boardRect.width + GAP) - SAFE_MARGIN,
+    width: trayWidth,
     height: availableHeight
+  };
+  const handleRect = {
+    x: trayRect.x,
+    y: trayRect.y,
+    width: Math.min(TRAY_HANDLE_WIDTH, trayRect.width),
+    height: trayRect.height
   };
 
   return {
@@ -96,7 +110,8 @@ function buildWideLayout(
     board: { rect: boardRect },
     tray: {
       rect: trayRect,
-      ...buildWideTrayLayout(trayRect, input.pieceCount, input.trayCollapsed),
+      handleRect,
+      ...buildWideTrayLayout(trayRect, handleRect, input.pieceCount, input.trayCollapsed),
       collapsed: input.trayCollapsed
     }
   };
@@ -105,7 +120,7 @@ function buildWideLayout(
 function buildMobileLayout(input: BuildPlayLayoutInput, boardAspect: number): PlayLayout {
   const trayWidth = input.width - SAFE_MARGIN * 2;
   const resolvedTrayHeight = input.trayCollapsed
-    ? TRAY_COLLAPSED_WIDTH
+    ? MOBILE_TRAY_COLLAPSED_HEIGHT
     : Math.min(TRAY_DRAWER_HEIGHT, Math.max(TRAY_COLLAPSED_WIDTH, input.height - SAFE_MARGIN * 2));
   const canUseDockedDrawer =
     input.trayCollapsed ||
@@ -129,13 +144,26 @@ function buildMobileLayout(input: BuildPlayLayoutInput, boardAspect: number): Pl
       width: trayWidth,
       height: resolvedTrayHeight
     };
+    const handleRect = {
+      x: trayRect.x,
+      y: trayRect.y,
+      width: trayRect.width,
+      height: Math.min(TRAY_COLLAPSED_WIDTH, trayRect.height)
+    };
 
     return {
       mode: 'mobile',
       board: { rect: boardRect },
       tray: {
         rect: trayRect,
-        ...buildPagedTrayLayout(trayRect, input.pieceCount, MOBILE_TRAY_COLUMNS, MOBILE_TRAY_ROWS, input.trayCollapsed),
+        handleRect,
+        ...buildPagedTrayLayout(
+          trayRect,
+          input.pieceCount,
+          MOBILE_TRAY_COLUMNS,
+          MOBILE_TRAY_ROWS,
+          input.trayCollapsed
+        ),
         collapsed: input.trayCollapsed
       }
     };
@@ -146,6 +174,12 @@ function buildMobileLayout(input: BuildPlayLayoutInput, boardAspect: number): Pl
     y: input.height - SAFE_MARGIN - resolvedTrayHeight,
     width: trayWidth,
     height: resolvedTrayHeight
+  };
+  const handleRect = {
+    x: trayRect.x,
+    y: trayRect.y,
+    width: trayRect.width,
+    height: Math.min(TRAY_COLLAPSED_WIDTH, trayRect.height)
   };
   const availableWidth = Math.max(280, input.width - SAFE_MARGIN * 2);
   const availableHeight = Math.max(MIN_MOBILE_BOARD_HEIGHT, input.height - SAFE_MARGIN * 2);
@@ -162,10 +196,30 @@ function buildMobileLayout(input: BuildPlayLayoutInput, boardAspect: number): Pl
     board: { rect: boardRect },
     tray: {
       rect: trayRect,
-      ...buildPagedTrayLayout(trayRect, input.pieceCount, MOBILE_TRAY_COLUMNS, MOBILE_TRAY_ROWS, input.trayCollapsed),
+      handleRect,
+      ...buildPagedTrayLayout(
+        trayRect,
+        input.pieceCount,
+        MOBILE_TRAY_COLUMNS,
+        MOBILE_TRAY_ROWS,
+        input.trayCollapsed
+      ),
       collapsed: input.trayCollapsed
     }
   };
+}
+
+function resolveWideTrayWidth(
+  width: number,
+  mode: Exclude<PlayLayout['mode'], 'mobile'>
+): number {
+  const ratioWidth = Math.round(width * 0.17);
+
+  if (mode === 'desktop') {
+    return clamp(ratioWidth, DESKTOP_TRAY_MIN_WIDTH, DESKTOP_TRAY_MAX_WIDTH);
+  }
+
+  return clamp(ratioWidth, TABLET_TRAY_MIN_WIDTH, TABLET_TRAY_MAX_WIDTH);
 }
 
 function fitRect(maxWidth: number, maxHeight: number, aspect: number): { width: number; height: number } {
@@ -203,6 +257,7 @@ function fitBoardRect(
 
 function buildWideTrayLayout(
   trayRect: LayoutRect,
+  handleRect: LayoutRect,
   pieceCount: number,
   collapsed: boolean
 ): {
@@ -214,7 +269,13 @@ function buildWideTrayLayout(
     return { slots: [], pageSize: 0, pageCount: 0 };
   }
 
-  const slots = buildSinglePageWideTraySlots(trayRect, pieceCount);
+  const slotsRect = {
+    x: handleRect.x + handleRect.width + 10,
+    y: trayRect.y + 10,
+    width: Math.max(1, trayRect.width - handleRect.width - 20),
+    height: Math.max(1, trayRect.height - 20)
+  };
+  const slots = buildSinglePageWideTraySlots(slotsRect, pieceCount);
 
   if (slots.length === 0) {
     return { slots: [], pageSize: 0, pageCount: 0 };
@@ -255,6 +316,10 @@ function buildPagedTrayLayout(
     pageSize,
     pageCount: Math.ceil(pieceCount / pageSize)
   };
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function buildBoundedTraySlots(trayRect: LayoutRect, columns: number, rows: number): LayoutRect[] {

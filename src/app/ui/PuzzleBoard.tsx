@@ -342,7 +342,7 @@ class PuzzleBoardScene extends Phaser.Scene {
         this.activeDragPieceId = piece.id;
         this.traySwipeAnchor = null;
         this.onPlaySound('piece_pickup');
-        sprite.setScale(this.getBaseScale(sprite) * 1.02);
+        sprite.setScale(this.getDragScale(piece, sprite));
         sprite.setDepth(this.dragDepth += 1);
       }
     );
@@ -371,7 +371,6 @@ class PuzzleBoardScene extends Phaser.Scene {
         return;
       }
 
-      sprite.setScale(this.getBaseScale(sprite));
       const wasCompletedBefore = Boolean(this.currentSession.completedAt);
       const boardPoint = this.toBoardPoint(sprite);
 
@@ -456,6 +455,37 @@ class PuzzleBoardScene extends Phaser.Scene {
     return (sprite.getData('baseScale') as number | undefined) ?? 1;
   }
 
+  private getCurrentPieceScale(sprite: Phaser.GameObjects.Image) {
+    const scaleSource = sprite as Phaser.GameObjects.Image & {
+      scale?: number;
+      scaleX?: number;
+      scaleY?: number;
+    };
+
+    return {
+      x: scaleSource.scaleX ?? scaleSource.scale ?? this.getBaseScale(sprite),
+      y: scaleSource.scaleY ?? scaleSource.scale ?? this.getBaseScale(sprite)
+    };
+  }
+
+  private getBoardPieceScale() {
+    const layout = this.currentLayout;
+
+    if (!layout) {
+      return 1;
+    }
+
+    return layout.board.rect.width / this.currentSession.definition.board.width;
+  }
+
+  private getDragScale(piece: PuzzlePieceState, sprite: Phaser.GameObjects.Image) {
+    if (piece.zone === 'tray') {
+      return this.getBoardPieceScale();
+    }
+
+    return this.getBaseScale(sprite);
+  }
+
   private getLooseTrayPieces() {
     return this.currentSession.pieces
       .filter(
@@ -476,14 +506,15 @@ class PuzzleBoardScene extends Phaser.Scene {
 
   private toBoardPoint(sprite: Phaser.GameObjects.Image) {
     const layout = this.currentLayout;
+    const currentScale = this.getCurrentPieceScale(sprite);
     const boardScaleX = layout
       ? layout.board.rect.width / this.currentSession.definition.board.width
       : 1;
     const boardScaleY = layout
       ? layout.board.rect.height / this.currentSession.definition.board.height
       : 1;
-    const topLeftX = sprite.x - (this.currentSession.definition.pieceWidth * boardScaleX) / 2;
-    const topLeftY = sprite.y - (this.currentSession.definition.pieceHeight * boardScaleY) / 2;
+    const topLeftX = sprite.x - (this.currentSession.definition.pieceWidth * currentScale.x) / 2;
+    const topLeftY = sprite.y - (this.currentSession.definition.pieceHeight * currentScale.y) / 2;
 
     if (!layout) {
       return {

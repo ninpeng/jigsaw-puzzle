@@ -15,7 +15,12 @@ import {
 import { SoundProvider, useSound } from './audio/SoundProvider';
 import { BUILT_IN_SOURCES } from './catalog';
 import { HomePage } from './routes/HomePage';
-import { createLocalPuzzleSource } from './upload';
+import {
+  finalizePendingUpload,
+  prepareLocalPuzzleUpload,
+  rotatePendingUpload,
+  type PendingUploadImage
+} from './upload';
 
 const PlayPage = lazy(async () => {
   const module = await import('./routes/PlayPage');
@@ -53,6 +58,7 @@ function HomeRoute() {
   const [selectedDifficultyId, setSelectedDifficultyId] =
     useState<DifficultyPreset['id']>('easy');
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [pendingUpload, setPendingUpload] = useState<PendingUploadImage | null>(null);
 
   useEffect(() => {
     loadHomeData().then(({ sources: loadedSources, sessions: loadedSessions }) => {
@@ -66,6 +72,12 @@ function HomeRoute() {
     [selectedDifficultyId]
   );
 
+  async function refreshHomeData() {
+    const homeData = await loadHomeData();
+    setSources(homeData.sources);
+    setSessions(homeData.sessions);
+  }
+
   return (
     <HomePage
       sources={sources}
@@ -73,6 +85,7 @@ function HomeRoute() {
       selectedDifficulty={selectedDifficulty}
       soundEnabled={enabled}
       uploadError={uploadError}
+      pendingUpload={pendingUpload}
       onDifficultyChange={setSelectedDifficultyId}
       onToggleSound={toggleEnabled}
       onUiClick={() => {
@@ -98,17 +111,49 @@ function HomeRoute() {
       }}
       onUploadFile={async (file) => {
         try {
-          const source = await createLocalPuzzleSource(file);
-          await savePuzzleSource(source);
-          const homeData = await loadHomeData();
-          setSources(homeData.sources);
-          setSessions(homeData.sessions);
+          const preparedUpload = await prepareLocalPuzzleUpload(file);
+
+          if (preparedUpload.kind === 'ready') {
+            await savePuzzleSource(preparedUpload.source);
+            await refreshHomeData();
+            setPendingUpload(null);
+          } else {
+            setPendingUpload(preparedUpload.pendingUpload);
+          }
+
           setUploadError(null);
         } catch (error) {
           setUploadError(
             error instanceof Error ? error.message : '업로드 이미지를 준비하지 못했습니다.'
           );
         }
+      }}
+      onRotatePendingUploadLeft={async () => {
+        if (!pendingUpload) {
+          return;
+        }
+
+        setPendingUpload(await rotatePendingUpload(pendingUpload, 'left'));
+      }}
+      onRotatePendingUploadRight={async () => {
+        if (!pendingUpload) {
+          return;
+        }
+
+        setPendingUpload(await rotatePendingUpload(pendingUpload, 'right'));
+      }}
+      onConfirmPendingUpload={async () => {
+        if (!pendingUpload) {
+          return;
+        }
+
+        const source = finalizePendingUpload(pendingUpload);
+        await savePuzzleSource(source);
+        await refreshHomeData();
+        setPendingUpload(null);
+      }}
+      onCancelPendingUpload={() => {
+        setPendingUpload(null);
       }}
     />
   );

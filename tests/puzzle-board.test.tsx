@@ -380,6 +380,12 @@ function makeLayout(width: number, height: number, traySlots: PlayLayout['tray']
         width: 280,
         height: 180
       },
+      handleRect: {
+        x: 60,
+        y: height + 72,
+        width: 28,
+        height: 180
+      },
       slots: traySlots,
       collapsed: false,
       pageSize: traySlots.length,
@@ -585,6 +591,9 @@ describe('PuzzleBoard', () => {
     const draggedPiece = phaserMocks.imageCalls.find((call) => call.getData('pieceId') === 'piece-2');
     expect(draggedPiece).toBeDefined();
 
+    phaserMocks.inputHandlers.dragstart?.({}, draggedPiece);
+    expect(draggedPiece?.scale).toBeCloseTo(mobileLayout.board.rect.width / definition.board.width, 3);
+
     draggedPiece?.setPosition(360, 264);
     phaserMocks.inputHandlers.dragend?.({}, draggedPiece);
 
@@ -660,5 +669,83 @@ describe('PuzzleBoard', () => {
     phaserMocks.inputHandlers.pointerdown?.({ x: 300, y: 760 });
     phaserMocks.inputHandlers.pointerup?.({ x: 180, y: 764 });
     expect(onNextTrayPage).toHaveBeenCalledTimes(1);
+  });
+
+  it('promotes tray drags to board scale so edge pieces can land on the board edge', async () => {
+    const edgeDefinition: PuzzleSession['definition'] = {
+      ...definition,
+      pieces: [
+        {
+          id: 'edge-piece',
+          row: 0,
+          col: 0,
+          homeX: 120,
+          homeY: 96,
+          isEdge: true,
+          connectors: { top: 0, right: 0, bottom: 0, left: 0 }
+        }
+      ]
+    };
+    const edgeSession: PuzzleSession = {
+      ...makeSession(),
+      definition: edgeDefinition,
+      pieces: [
+        {
+          ...edgeDefinition.pieces[0],
+          x: 900,
+          y: 180,
+          fixed: false,
+          zone: 'tray',
+          traySlotIndex: 0,
+          boardPosition: null
+        }
+      ]
+    };
+    const layout = makeLayout(960, 640, [{ x: 76, y: 680, width: 96, height: 96 }]);
+    puzzleMocks.buildPlayLayout.mockReturnValue(layout);
+
+    render(
+      <PuzzleBoard
+        session={edgeSession}
+        highlightedPieceId={null}
+        viewport={{ width: 960, height: 760 }}
+        currentTrayPage={0}
+        onRequestPreviousTrayPage={vi.fn()}
+        onRequestNextTrayPage={vi.fn()}
+        onPlaySound={vi.fn()}
+        onSessionChange={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(phaserMocks.imageCalls.some((call) => call.getData('pieceId') === 'edge-piece')).toBe(
+        true
+      );
+    });
+
+    const draggedPiece = phaserMocks.imageCalls.find((call) => call.getData('pieceId') === 'edge-piece');
+    expect(draggedPiece).toBeDefined();
+
+    phaserMocks.inputHandlers.dragstart?.({}, draggedPiece);
+    expect(draggedPiece?.scale).toBeCloseTo(layout.board.rect.width / edgeDefinition.board.width, 3);
+
+    draggedPiece?.setPosition(120, 104);
+    phaserMocks.inputHandlers.dragend?.({}, draggedPiece);
+
+    await waitFor(() => {
+      expect(puzzleMocks.snapPieceToBoard).toHaveBeenCalled();
+    });
+
+    expect(puzzleMocks.snapPieceToBoard).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        board: edgeDefinition.board
+      }),
+      'edge-piece',
+      {
+        x: 120,
+        y: 96
+      }
+    );
   });
 });

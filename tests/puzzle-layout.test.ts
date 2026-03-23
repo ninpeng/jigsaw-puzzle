@@ -13,9 +13,24 @@ describe('puzzle layout', () => {
 
     expect(layout.mode).toBe('desktop');
     expect(layout.tray.rect.width).toBeGreaterThan(0);
+    expect(layout.tray.handleRect.width).toBeGreaterThan(0);
     expect(layout.board.rect.width).toBeGreaterThan(layout.board.rect.height);
     expect(layout.tray.pageSize).toBeGreaterThan(0);
     expect(layout.tray.pageCount).toBe(1);
+  });
+
+  it('prioritizes board size on wide laptop layouts instead of shrinking the workspace around external chrome', () => {
+    const layout = buildPlayLayout({
+      width: 1280,
+      height: 800,
+      trayCollapsed: false,
+      pieceCount: 24,
+      imageWidth: 1600,
+      imageHeight: 900
+    });
+
+    expect(layout.board.rect.width).toBeGreaterThan(900);
+    expect(layout.board.rect.height).toBeGreaterThan(500);
   });
 
   it('builds a mobile layout with a bottom drawer tray', () => {
@@ -71,6 +86,10 @@ describe('puzzle layout', () => {
           slot.y + slot.height <= layout.tray.rect.y + layout.tray.rect.height
       )
     ).toBe(true);
+    expect(layout.tray.handleRect.x).toBeGreaterThanOrEqual(layout.tray.rect.x);
+    expect(layout.tray.handleRect.x + layout.tray.handleRect.width).toBeLessThanOrEqual(
+      layout.tray.rect.x + layout.tray.rect.width
+    );
   });
 
   it('keeps dense mobile tray slots inside the drawer rectangle and uses paging instead of shrinking the board', () => {

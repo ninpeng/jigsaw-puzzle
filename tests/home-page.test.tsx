@@ -40,12 +40,17 @@ describe('HomePage', () => {
         selectedDifficulty={DIFFICULTY_PRESETS.easy}
         soundEnabled
         uploadError={null}
+        pendingUpload={null}
         onDifficultyChange={onDifficultyChange}
         onToggleSound={vi.fn()}
         onUiClick={onUiClick}
         onStartPuzzle={onStartPuzzle}
         onResumeSession={vi.fn()}
         onUploadFile={vi.fn()}
+        onRotatePendingUploadLeft={vi.fn()}
+        onRotatePendingUploadRight={vi.fn()}
+        onConfirmPendingUpload={vi.fn()}
+        onCancelPendingUpload={vi.fn()}
       />
     );
 
@@ -71,12 +76,17 @@ describe('HomePage', () => {
         selectedDifficulty={DIFFICULTY_PRESETS.easy}
         soundEnabled
         uploadError={null}
+        pendingUpload={null}
         onDifficultyChange={vi.fn()}
         onToggleSound={vi.fn()}
         onUiClick={vi.fn()}
         onStartPuzzle={vi.fn()}
         onResumeSession={onResumeSession}
         onUploadFile={vi.fn()}
+        onRotatePendingUploadLeft={vi.fn()}
+        onRotatePendingUploadRight={vi.fn()}
+        onConfirmPendingUpload={vi.fn()}
+        onCancelPendingUpload={vi.fn()}
       />
     );
 
@@ -97,12 +107,17 @@ describe('HomePage', () => {
         selectedDifficulty={DIFFICULTY_PRESETS.easy}
         soundEnabled
         uploadError={null}
+        pendingUpload={null}
         onDifficultyChange={vi.fn()}
         onToggleSound={onToggleSound}
         onUiClick={vi.fn()}
         onStartPuzzle={vi.fn()}
         onResumeSession={vi.fn()}
         onUploadFile={vi.fn()}
+        onRotatePendingUploadLeft={vi.fn()}
+        onRotatePendingUploadRight={vi.fn()}
+        onConfirmPendingUpload={vi.fn()}
+        onCancelPendingUpload={vi.fn()}
       />
     );
 
