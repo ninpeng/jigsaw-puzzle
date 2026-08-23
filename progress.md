@@ -13,3 +13,9 @@ Original prompt: 맥북 같은 해상도에서 퍼즐 영역이 세로가 더 �
 - Verification: pnpm test => 14 files / 53 tests passing. pnpm build => success, with the existing PuzzleBoard large-chunk warning still present.
 - 2026-03-24: Follow-up user feedback showed the previous fix was incomplete. Updated tray drag interaction so loose tray pieces are promoted to board scale as soon as drag starts, and drag-end coordinate conversion now uses that board-scale drag state instead of the smaller tray scale.
 - 2026-03-24: Refined board drag regression tests to assert tray pieces expand to board scale during drag and that edge drops resolve to the expected canonical board coordinates.
+- 2026-08-24: Added a touch-friendly tray layout for wide screens. Tray slots now stay at least 44px on the target iPad layouts and dense presets page instead of shrinking every piece into one column set.
+- 2026-08-24: Added deterministic seeded tray shuffling, stable edge-first ordering, and an `all / edges` tray filter. Hint selection now follows tray order so edge-only mode never highlights a hidden inner piece.
+- 2026-08-24: Compacted the play HUD to about 80px on iPad mini/Pro landscape, fixed the tools menu stacking above the Phaser canvas, and shortened tray pager labels without changing their accessible names.
+- 2026-08-24: Fixed short phone-landscape sizing so the board panel and wide-layout board remain inside the viewport instead of being clipped by the previous 360px/320px minimums.
+- Browser QA: iPad mini 1024x768 hard mode uses an 80.5px HUD and 4 tray pages; edge-only mode shows 32 pieces across 2 pages. iPad Pro 1366x1024 uses 3 pages, MacBook 1440x900 uses 3 pages, and 1920x1080 uses 2 pages with no document scrolling.
+- Final verification: 14 test files / 60 tests passed, TypeScript project build passed, and the Vite production build passed. The existing Phaser `PuzzleBoard` large-chunk warning remains.

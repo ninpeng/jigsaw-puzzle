@@ -68,6 +68,8 @@ export interface AssistAction {
 
 export type PieceZone = 'board' | 'tray';
 
+export type TrayFilter = 'all' | 'edges';
+
 export interface PuzzlePieceState extends PuzzlePieceDefinition {
   x: number;
   y: number;

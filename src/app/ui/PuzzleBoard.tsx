@@ -8,7 +8,8 @@ import {
   type PuzzlePieceDefinition,
   type PlayViewport,
   type PuzzlePieceState,
-  type PuzzleSession
+  type PuzzleSession,
+  type TrayFilter
 } from '../../puzzle';
 import { resolveBoardDragEndSounds } from '../audio/boardSound';
 import type { SoundId } from '../audio/soundRegistry';
@@ -24,6 +25,7 @@ interface PuzzleBoardProps {
   highlightedPieceId: string | null;
   viewport?: PlayViewport;
   currentTrayPage: number;
+  trayFilter?: TrayFilter;
   onRequestPreviousTrayPage: () => void;
   onRequestNextTrayPage: () => void;
   onPlaySound: (soundId: SoundId) => void;
@@ -49,6 +51,7 @@ class PuzzleBoardScene extends Phaser.Scene {
   private highlightTween: Phaser.Tweens.Tween | null = null;
   private currentLayout: PlayLayout | null = null;
   private currentTrayPage: number;
+  private currentTrayFilter: TrayFilter;
   private onRequestPreviousTrayPage: () => void;
   private onRequestNextTrayPage: () => void;
   private activeDragPieceId: string | null = null;
@@ -59,6 +62,7 @@ class PuzzleBoardScene extends Phaser.Scene {
     session: PuzzleSession,
     viewport: PlayViewport | null,
     currentTrayPage: number,
+    trayFilter: TrayFilter,
     onRequestPreviousTrayPage: () => void,
     onRequestNextTrayPage: () => void,
     onSessionChange: (session: PuzzleSession) => void,
@@ -68,6 +72,7 @@ class PuzzleBoardScene extends Phaser.Scene {
     this.currentSession = session;
     this.currentViewport = viewport;
     this.currentTrayPage = currentTrayPage;
+    this.currentTrayFilter = trayFilter;
     this.onRequestPreviousTrayPage = onRequestPreviousTrayPage;
     this.onRequestNextTrayPage = onRequestNextTrayPage;
     this.onPlaySound = onPlaySound;
@@ -96,6 +101,14 @@ class PuzzleBoardScene extends Phaser.Scene {
 
   setCurrentTrayPage(currentTrayPage: number) {
     this.currentTrayPage = currentTrayPage;
+
+    if (this.sceneReady) {
+      this.syncScene();
+    }
+  }
+
+  setTrayFilter(trayFilter: TrayFilter) {
+    this.currentTrayFilter = trayFilter;
 
     if (this.sceneReady) {
       this.syncScene();
@@ -490,7 +503,10 @@ class PuzzleBoardScene extends Phaser.Scene {
     return this.currentSession.pieces
       .filter(
         (piece): piece is PuzzlePieceState =>
-          !piece.fixed && piece.zone === 'tray' && piece.traySlotIndex !== null
+          !piece.fixed &&
+          piece.zone === 'tray' &&
+          piece.traySlotIndex !== null &&
+          (this.currentTrayFilter === 'all' || piece.isEdge)
       )
       .sort((left, right) => {
         const leftIndex = left.traySlotIndex ?? Number.POSITIVE_INFINITY;
@@ -864,6 +880,7 @@ export function PuzzleBoard({
   highlightedPieceId,
   viewport,
   currentTrayPage,
+  trayFilter = 'all',
   onRequestPreviousTrayPage,
   onRequestNextTrayPage,
   onPlaySound,
@@ -886,6 +903,7 @@ export function PuzzleBoard({
       session,
       viewport ?? null,
       currentTrayPage,
+      trayFilter,
       onRequestPreviousTrayPage,
       onRequestNextTrayPage,
       onSessionChange,
@@ -933,6 +951,10 @@ export function PuzzleBoard({
   useEffect(() => {
     sceneRef.current?.setCurrentTrayPage(currentTrayPage);
   }, [currentTrayPage]);
+
+  useEffect(() => {
+    sceneRef.current?.setTrayFilter(trayFilter);
+  }, [trayFilter]);
 
   useEffect(() => {
     sceneRef.current?.setTrayPagingHandlers(onRequestPreviousTrayPage, onRequestNextTrayPage);

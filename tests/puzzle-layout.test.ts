@@ -135,7 +135,7 @@ describe('puzzle layout', () => {
     expect(layout.tray.rect.y).toBeLessThan(layout.board.rect.y + layout.board.rect.height);
   });
 
-  it('keeps a dense wide tray single-page while fitting all slots inside the tray rectangle', () => {
+  it('pages a dense wide tray instead of shrinking pieces below a touch-friendly size', () => {
     const layout = buildPlayLayout({
       width: 1366,
       height: 900,
@@ -146,11 +146,11 @@ describe('puzzle layout', () => {
     });
 
     expect(layout.mode).toBe('desktop');
-    expect(layout.tray.pageCount).toBe(1);
+    expect(layout.tray.pageCount).toBeGreaterThan(1);
     expect(layout.tray.pageSize).toBeGreaterThan(0);
-    expect(layout.tray.pageSize).toBe(80);
+    expect(layout.tray.pageSize).toBeLessThan(80);
     expect(layout.tray.slots.length).toBe(layout.tray.pageSize);
-    expect(layout.tray.slots.length).toBe(80);
+    expect(Math.min(...layout.tray.slots.map((slot) => slot.width))).toBeGreaterThanOrEqual(44);
     expect(
       layout.tray.slots.every(
         (slot) =>
@@ -160,5 +160,36 @@ describe('puzzle layout', () => {
           slot.y + slot.height <= layout.tray.rect.y + layout.tray.rect.height
       )
     ).toBe(true);
+  });
+
+  it('keeps iPad mini tray pieces touchable while preserving a wide board', () => {
+    const layout = buildPlayLayout({
+      width: 966,
+      height: 570,
+      trayCollapsed: false,
+      pieceCount: 80,
+      imageWidth: 1600,
+      imageHeight: 900
+    });
+
+    expect(layout.mode).toBe('tablet');
+    expect(layout.board.rect.width).toBeGreaterThanOrEqual(680);
+    expect(layout.tray.pageCount).toBeGreaterThan(1);
+    expect(Math.min(...layout.tray.slots.map((slot) => slot.width))).toBeGreaterThanOrEqual(44);
+  });
+
+  it('keeps tablet-mode landscape layouts inside a short phone viewport', () => {
+    const layout = buildPlayLayout({
+      width: 786,
+      height: 254,
+      trayCollapsed: false,
+      pieceCount: 80,
+      imageWidth: 1600,
+      imageHeight: 900
+    });
+
+    expect(layout.mode).toBe('tablet');
+    expect(layout.board.rect.y + layout.board.rect.height).toBeLessThanOrEqual(254);
+    expect(layout.tray.rect.y + layout.tray.rect.height).toBeLessThanOrEqual(254);
   });
 });

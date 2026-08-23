@@ -499,6 +499,42 @@ describe('PuzzleBoard', () => {
     expect(boardPiece?.scale).toBeCloseTo(1.3333, 3);
   });
 
+  it('renders only loose edge pieces when the tray uses the edge filter', async () => {
+    const layout = makeLayout(960, 640, [
+      { x: 900, y: 120, width: 120, height: 120 },
+      { x: 1040, y: 120, width: 120, height: 120 },
+      { x: 900, y: 260, width: 120, height: 120 }
+    ]);
+    puzzleMocks.buildPlayLayout.mockReturnValue(layout);
+    const baseSession = makeSession();
+    const session = {
+      ...baseSession,
+      pieces: baseSession.pieces.map((piece) =>
+        piece.id === 'piece-3' ? { ...piece, isEdge: false } : piece
+      )
+    };
+    render(
+      <PuzzleBoard
+        session={session}
+        highlightedPieceId={null}
+        viewport={{ width: 1120, height: 760 }}
+        currentTrayPage={0}
+        trayFilter="edges"
+        onRequestPreviousTrayPage={vi.fn()}
+        onRequestNextTrayPage={vi.fn()}
+        onPlaySound={vi.fn()}
+        onSessionChange={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(phaserMocks.imageCalls.some((call) => call.getData('pieceId') === 'piece-1')).toBe(true);
+    });
+
+    expect(phaserMocks.imageCalls.some((call) => call.getData('pieceId') === 'piece-2')).toBe(true);
+    expect(phaserMocks.imageCalls.some((call) => call.getData('pieceId') === 'piece-3')).toBe(false);
+  });
+
   it('recomputes layout when the viewport changes instead of keeping the initial board scale', async () => {
     const desktopLayout = makeLayout(960, 640, [
       { x: 900, y: 120, width: 120, height: 120 }

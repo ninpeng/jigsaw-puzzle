@@ -167,15 +167,21 @@ vi.mock('../src/app/audio/SoundProvider', () => ({
 vi.mock('../src/app/ui/PuzzleBoard', () => ({
   PuzzleBoard: ({
     currentTrayPage,
+    trayFilter,
     onRequestPreviousTrayPage,
     onRequestNextTrayPage
   }: {
     currentTrayPage: number;
+    trayFilter?: string;
     onRequestPreviousTrayPage: () => void;
     onRequestNextTrayPage: () => void;
   }) => (
     <div>
-      <div data-testid="mock-puzzle-board" data-tray-page={String(currentTrayPage)} />
+      <div
+        data-testid="mock-puzzle-board"
+        data-tray-page={String(currentTrayPage)}
+        data-tray-filter={trayFilter}
+      />
       <button type="button" onClick={onRequestPreviousTrayPage}>
         mock-prev-page
       </button>
@@ -290,6 +296,9 @@ describe('PlayPage', () => {
     );
 
     expect(await screen.findByTestId('play-viewport')).toBeInTheDocument();
+    expect(Number.parseInt(screen.getByTestId('board-panel').style.height, 10)).toBeLessThanOrEqual(
+      240
+    );
     expect(screen.queryByText('가로 모드로 돌려주세요.')).not.toBeInTheDocument();
   });
 
@@ -387,6 +396,46 @@ describe('PlayPage', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: '원본 보기' }));
 
     expect(await screen.findByAltText('Aurora Lake reference')).toBeInTheDocument();
+    rectSpy.mockRestore();
+  });
+
+  it('toggles an edge-only tray filter from the tools menu', async () => {
+    setWindowSize(1280, 800);
+    const rectSpy = mockPlayViewportRect(1120, 720);
+
+    render(
+      <MemoryRouter initialEntries={['/play/session-play-page']}>
+        <Routes>
+          <Route path="/play/:sessionId" element={<PlayPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByTestId('mock-puzzle-board')).toHaveAttribute(
+      'data-tray-filter',
+      'all'
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '도구 열기' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '가장자리만 보기' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-puzzle-board')).toHaveAttribute(
+        'data-tray-filter',
+        'edges'
+      );
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '도구 열기' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '전체 조각 보기' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-puzzle-board')).toHaveAttribute(
+        'data-tray-filter',
+        'all'
+      );
+    });
+
     rectSpy.mockRestore();
   });
 });

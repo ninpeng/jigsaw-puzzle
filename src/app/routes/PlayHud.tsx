@@ -9,11 +9,12 @@ interface PlayHudProps {
   elapsedMs: number;
   soundEnabled: boolean;
   toolsOpen: boolean;
+  edgeFilterActive: boolean;
   onHint: () => void;
   onGoHome: () => void;
   onToggleSound: () => void;
   onToggleTools: () => void;
-  onSeparateEdges: () => void;
+  onToggleEdgeFilter: () => void;
   onToggleReference: () => void;
 }
 
@@ -24,11 +25,12 @@ export const PlayHud = forwardRef<HTMLElement, PlayHudProps>(function PlayHud(
     elapsedMs,
     soundEnabled,
     toolsOpen,
+    edgeFilterActive,
     onHint,
     onGoHome,
     onToggleSound,
     onToggleTools,
-    onSeparateEdges,
+    onToggleEdgeFilter,
     onToggleReference
   },
   ref
@@ -88,9 +90,10 @@ export const PlayHud = forwardRef<HTMLElement, PlayHudProps>(function PlayHud(
                 type="button"
                 className="ghost-button"
                 role="menuitem"
-                onClick={onSeparateEdges}
+                aria-pressed={edgeFilterActive}
+                onClick={onToggleEdgeFilter}
               >
-                가장자리 분리
+                {edgeFilterActive ? '전체 조각 보기' : '가장자리만 보기'}
               </button>
             </div>
           ) : null}

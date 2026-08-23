@@ -20,7 +20,8 @@ export type {
   PuzzleSession,
   PuzzleSessionSummary,
   PuzzleSource,
-  PuzzleSourceType
+  PuzzleSourceType,
+  TrayFilter
 } from './types';
 export type {
   BuildPlayLayoutInput,

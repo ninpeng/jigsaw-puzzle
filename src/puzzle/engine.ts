@@ -171,6 +171,37 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+function hashString(value: string): number {
+  let hash = 2166136261;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return hash >>> 0;
+}
+
+function shuffleWithSeed<T>(items: T[], seed: number): T[] {
+  const shuffled = [...items];
+  let state = seed >>> 0;
+
+  const random = () => {
+    state += 0x6d2b79f5;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const targetIndex = Math.floor(random() * (index + 1));
+    [shuffled[index], shuffled[targetIndex]] = [shuffled[targetIndex], shuffled[index]];
+  }
+
+  return shuffled;
+}
+
 function cloneSession(session: PuzzleSession): PuzzleSession {
   return {
     ...session,
@@ -236,13 +267,25 @@ export function createPuzzleDefinition(source: PuzzleSource, preset: DifficultyP
 export function createPuzzleSession(definition: PuzzleDefinition, options: SessionOptions = {}): PuzzleSession {
   const timestamp = nowIso();
   const traySlots = buildTraySlots(definition, definition.pieces.length);
+  const shuffledPieceIds = shuffleWithSeed(
+    definition.pieces.map((piece) => piece.id),
+    options.seed ?? hashString(`${definition.id}:${timestamp}`)
+  );
+  const traySlotIndexByPieceId = new Map(
+    shuffledPieceIds.map((pieceId, traySlotIndex) => [pieceId, traySlotIndex])
+  );
 
   return {
     id: `session-${definition.id}-${timestamp}`,
     definition,
-    pieces: definition.pieces.map((piece, index) =>
-      buildSessionPiece(piece, traySlots[index] ?? traySlots[traySlots.length - 1], index)
-    ),
+    pieces: definition.pieces.map((piece) => {
+      const traySlotIndex = traySlotIndexByPieceId.get(piece.id) ?? 0;
+      return buildSessionPiece(
+        piece,
+        traySlots[traySlotIndex] ?? traySlots[traySlots.length - 1],
+        traySlotIndex
+      );
+    }),
     startedAt: timestamp,
     lastUpdatedAt: timestamp,
     elapsedMs: 0,
@@ -310,7 +353,19 @@ export function snapPieceToBoard(
 
 export function createHint(session: PuzzleSession): { pieceId: string | null; session: PuzzleSession } {
   const nextSession = cloneSession(session);
-  const target = nextSession.pieces.find((piece) => !piece.fixed) ?? null;
+  const target =
+    nextSession.pieces
+      .filter((piece) => !piece.fixed)
+      .sort((left, right) => {
+        const leftTrayIndex = left.traySlotIndex ?? Number.POSITIVE_INFINITY;
+        const rightTrayIndex = right.traySlotIndex ?? Number.POSITIVE_INFINITY;
+
+        if (leftTrayIndex !== rightTrayIndex) {
+          return leftTrayIndex - rightTrayIndex;
+        }
+
+        return left.id.localeCompare(right.id);
+      })[0] ?? null;
 
   nextSession.assistActions.push({
     type: 'hint',
@@ -322,28 +377,33 @@ export function createHint(session: PuzzleSession): { pieceId: string | null; se
   return { pieceId: target?.id ?? null, session: nextSession };
 }
 
-export function separateEdgePieces(session: PuzzleSession, definition: PuzzleDefinition): PuzzleSession {
+export function separateEdgePieces(session: PuzzleSession, _definition: PuzzleDefinition): PuzzleSession {
   const nextSession = cloneSession(session);
-  const trayTop = definition.board.y + definition.board.height + 36;
-  let columnIndex = 0;
+  const looseTrayPieces = nextSession.pieces
+    .filter(
+      (piece): piece is PuzzlePieceState =>
+        !piece.fixed && piece.zone === 'tray' && piece.traySlotIndex !== null
+    )
+    .sort(compareLooseTrayPieces);
+  const orderedPieceIds = [
+    ...looseTrayPieces.filter((piece) => piece.isEdge),
+    ...looseTrayPieces.filter((piece) => !piece.isEdge)
+  ].map((piece) => piece.id);
+  const traySlotIndexByPieceId = new Map(
+    orderedPieceIds.map((pieceId, traySlotIndex) => [pieceId, traySlotIndex])
+  );
 
   nextSession.pieces = nextSession.pieces.map((piece) => {
-    if (!piece.isEdge || piece.fixed) {
+    const traySlotIndex = traySlotIndexByPieceId.get(piece.id);
+
+    if (traySlotIndex === undefined) {
       return piece;
     }
 
-    const arrangedPiece = setTrayPlacement(piece, columnIndex, {
-      x: 28 + (columnIndex % 7) * (definition.pieceWidth + 12),
-      y: trayTop + Math.floor(columnIndex / 7) * (definition.pieceHeight + 12)
-    });
-
-    const positionedPiece = {
+    return {
       ...piece,
-      ...arrangedPiece
+      traySlotIndex
     };
-
-    columnIndex += 1;
-    return positionedPiece;
   });
 
   nextSession.assistActions.push({
@@ -351,5 +411,5 @@ export function separateEdgePieces(session: PuzzleSession, definition: PuzzleDef
     timestamp: nowIso()
   });
   nextSession.lastUpdatedAt = nowIso();
-  return normalizeLooseTrayPieces(nextSession);
+  return nextSession;
 }

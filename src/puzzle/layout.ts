@@ -37,14 +37,15 @@ const TABLET_MIN_WIDTH = 640;
 const TRAY_HANDLE_WIDTH = 28;
 const DESKTOP_TRAY_MIN_WIDTH = 188;
 const DESKTOP_TRAY_MAX_WIDTH = 248;
-const TABLET_TRAY_MIN_WIDTH = 168;
-const TABLET_TRAY_MAX_WIDTH = 220;
+const TABLET_TRAY_MIN_WIDTH = 214;
+const TABLET_TRAY_MAX_WIDTH = 228;
 const TRAY_COLLAPSED_WIDTH = TRAY_HANDLE_WIDTH;
 const MOBILE_TRAY_COLLAPSED_HEIGHT = 64;
 const TRAY_DRAWER_HEIGHT = 188;
 const MIN_MOBILE_BOARD_HEIGHT = 180;
-const WIDE_TRAY_COLUMNS = 4;
-const WIDE_TRAY_ROWS = 4;
+const WIDE_TRAY_SLOT_GAP = 8;
+const WIDE_TRAY_MIN_SLOT_SIZE = 44;
+const WIDE_TRAY_PAGER_HEIGHT = 96;
 const MOBILE_TRAY_COLUMNS = 3;
 const MOBILE_TRAY_ROWS = 4;
 
@@ -79,7 +80,7 @@ function buildWideLayout(
   const trayOpenWidth = resolveWideTrayWidth(input.width, mode);
   const trayWidth = input.trayCollapsed ? TRAY_COLLAPSED_WIDTH : trayOpenWidth;
   const availableWidth = Math.max(320, input.width - SAFE_MARGIN * 2 - GAP - trayWidth);
-  const availableHeight = Math.max(320, input.height - SAFE_MARGIN * 2);
+  const availableHeight = Math.max(1, input.height - SAFE_MARGIN * 2);
   const boardSize = fitRect(availableWidth, availableHeight, boardAspect);
   const groupWidth = boardSize.width + GAP + trayWidth;
   const groupOffsetX = Math.max(0, Math.floor((input.width - SAFE_MARGIN * 2 - groupWidth) / 2));
@@ -275,7 +276,29 @@ function buildWideTrayLayout(
     width: Math.max(1, trayRect.width - handleRect.width - 20),
     height: Math.max(1, trayRect.height - 20)
   };
-  const slots = buildSinglePageWideTraySlots(slotsRect, pieceCount);
+  const initialCapacity = resolveGridCapacity(
+    slotsRect,
+    WIDE_TRAY_MIN_SLOT_SIZE,
+    WIDE_TRAY_SLOT_GAP
+  );
+  const pagedSlotsRect =
+    pieceCount > initialCapacity
+      ? {
+          ...slotsRect,
+          height: Math.max(1, slotsRect.height - WIDE_TRAY_PAGER_HEIGHT)
+        }
+      : slotsRect;
+  const pageCapacity = resolveGridCapacity(
+    pagedSlotsRect,
+    WIDE_TRAY_MIN_SLOT_SIZE,
+    WIDE_TRAY_SLOT_GAP
+  );
+  const visiblePieceCount = Math.min(pieceCount, pageCapacity);
+  const slots = buildSinglePageWideTraySlots(
+    pagedSlotsRect,
+    visiblePieceCount,
+    WIDE_TRAY_SLOT_GAP
+  );
 
   if (slots.length === 0) {
     return { slots: [], pageSize: 0, pageCount: 0 };
@@ -284,7 +307,7 @@ function buildWideTrayLayout(
   return {
     slots,
     pageSize: slots.length,
-    pageCount: 1
+    pageCount: Math.ceil(pieceCount / slots.length)
   };
 }
 
@@ -345,13 +368,24 @@ function buildBoundedTraySlots(trayRect: LayoutRect, columns: number, rows: numb
   return slots;
 }
 
-function buildSinglePageWideTraySlots(trayRect: LayoutRect, pieceCount: number): LayoutRect[] {
+function resolveGridCapacity(trayRect: LayoutRect, minimumSlotSize: number, gap: number): number {
+  const columns = Math.max(1, Math.floor((trayRect.width - gap) / (minimumSlotSize + gap)));
+  const rows = Math.max(1, Math.floor((trayRect.height - gap) / (minimumSlotSize + gap)));
+
+  return columns * rows;
+}
+
+function buildSinglePageWideTraySlots(
+  trayRect: LayoutRect,
+  pieceCount: number,
+  gap: number
+): LayoutRect[] {
   let bestSlots: LayoutRect[] = [];
   let bestSlotSize = 0;
 
   for (let columns = 1; columns <= pieceCount; columns += 1) {
     const rows = Math.ceil(pieceCount / columns);
-    const slots = buildFixedGridSlots(trayRect, columns, rows, pieceCount);
+    const slots = buildFixedGridSlots(trayRect, columns, rows, pieceCount, gap);
 
     if (slots.length !== pieceCount) {
       continue;
@@ -372,10 +406,11 @@ function buildFixedGridSlots(
   trayRect: LayoutRect,
   columns: number,
   rows: number,
-  pieceCount: number
+  pieceCount: number,
+  gap: number
 ): LayoutRect[] {
-  const innerWidth = trayRect.width - GAP * (columns + 1);
-  const innerHeight = trayRect.height - GAP * (rows + 1);
+  const innerWidth = trayRect.width - gap * (columns + 1);
+  const innerHeight = trayRect.height - gap * (rows + 1);
   const slotSize = Math.floor(Math.min(innerWidth / columns, innerHeight / rows));
 
   if (slotSize <= 0) {
@@ -386,8 +421,8 @@ function buildFixedGridSlots(
 
   for (let row = 0; row < rows && slots.length < pieceCount; row += 1) {
     for (let col = 0; col < columns && slots.length < pieceCount; col += 1) {
-      const x = trayRect.x + GAP + col * (slotSize + GAP);
-      const y = trayRect.y + GAP + row * (slotSize + GAP);
+      const x = trayRect.x + gap + col * (slotSize + gap);
+      const y = trayRect.y + gap + row * (slotSize + gap);
       const slot: LayoutRect = { x, y, width: slotSize, height: slotSize };
 
       if (slot.x + slot.width > trayRect.x + trayRect.width || slot.y + slot.height > trayRect.y + trayRect.height) {

@@ -10,7 +10,8 @@ import {
   separateEdgePieces,
   buildPlayLayout,
   type PuzzleSession,
-  type PuzzleSource
+  type PuzzleSource,
+  type TrayFilter
 } from '../../puzzle';
 import { useSound } from '../audio/SoundProvider';
 import { CompletePage } from './CompletePage';
@@ -31,6 +32,8 @@ const STACKED_HUD_HEIGHT = 110;
 const COMPACT_HUD_HEIGHT = 126;
 const STACKED_HUD_BREAKPOINT = 1200;
 const MIN_BOARD_PANEL_HEIGHT = 360;
+const MIN_SHORT_LANDSCAPE_BOARD_PANEL_HEIGHT = 180;
+const SHORT_LANDSCAPE_MAX_HEIGHT = 500;
 
 function resolveHudReserveHeight(windowWidth: number) {
   if (windowWidth <= COMPACT_PAGE_BREAKPOINT) {
@@ -48,9 +51,13 @@ function resolveBoardPanelHeight(windowWidth: number, windowHeight: number, hudH
   const shellPadding =
     windowWidth <= COMPACT_PAGE_BREAKPOINT ? COMPACT_PAGE_PADDING : DEFAULT_PAGE_PADDING;
   const reservedHudHeight = hudHeight ?? resolveHudReserveHeight(windowWidth);
+  const minimumBoardPanelHeight =
+    windowWidth > windowHeight && windowHeight <= SHORT_LANDSCAPE_MAX_HEIGHT
+      ? MIN_SHORT_LANDSCAPE_BOARD_PANEL_HEIGHT
+      : MIN_BOARD_PANEL_HEIGHT;
 
   return Math.max(
-    MIN_BOARD_PANEL_HEIGHT,
+    minimumBoardPanelHeight,
     windowHeight - shellPadding * 2 - PLAY_SHELL_GAP - reservedHudHeight
   );
 }
@@ -109,6 +116,7 @@ export function PlayPage() {
   const [loaded, setLoaded] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [currentTrayPage, setCurrentTrayPage] = useState(0);
+  const [trayFilter, setTrayFilter] = useState<TrayFilter>('all');
   const [toolsOpen, setToolsOpen] = useState(false);
   const [referenceOpen, setReferenceOpen] = useState(false);
   const lastTickRef = useRef<number | null>(null);
@@ -276,24 +284,34 @@ export function PlayPage() {
     };
   }, [highlightedPieceId]);
 
+  const visibleLooseTrayPieceCount = useMemo(() => {
+    if (!session) {
+      return 0;
+    }
+
+    return session.pieces.filter(
+      (piece) =>
+        !piece.fixed &&
+        piece.zone === 'tray' &&
+        piece.traySlotIndex !== null &&
+        (trayFilter === 'all' || piece.isEdge)
+    ).length;
+  }, [session, trayFilter]);
+
   const playLayout = useMemo(() => {
     if (!session || playViewportSize.width <= 0 || playViewportSize.height <= 0) {
       return null;
     }
 
-    const looseTrayPieceCount = session.pieces.filter(
-      (piece) => !piece.fixed && piece.zone === 'tray' && piece.traySlotIndex !== null
-    ).length;
-
     return buildPlayLayout({
       width: playViewportSize.width,
       height: playViewportSize.height,
       trayCollapsed: session.trayCollapsed,
-      pieceCount: looseTrayPieceCount,
+      pieceCount: visibleLooseTrayPieceCount,
       imageWidth: session.definition.imageWidth,
       imageHeight: session.definition.imageHeight
     });
-  }, [playViewportSize.height, playViewportSize.width, session]);
+  }, [playViewportSize.height, playViewportSize.width, session, visibleLooseTrayPieceCount]);
 
   const trayPageCount = playLayout?.tray.pageCount ?? 0;
 
@@ -305,6 +323,13 @@ export function PlayPage() {
 
     setCurrentTrayPage((current) => Math.min(current, trayPageCount - 1));
   }, [trayPageCount]);
+
+  useEffect(() => {
+    if (trayFilter === 'edges' && visibleLooseTrayPieceCount === 0) {
+      setTrayFilter('all');
+      setCurrentTrayPage(0);
+    }
+  }, [trayFilter, visibleLooseTrayPieceCount]);
 
   useEffect(() => {
     if (!loaded || !session || portraitGuardActive) {
@@ -370,8 +395,10 @@ export function PlayPage() {
         sessionId,
         sourceTitle: session?.definition.sourceTitle ?? null,
         trayCollapsed: session?.trayCollapsed ?? null,
+        trayFilter,
         trayPage: currentTrayPage,
         trayPageCount,
+        visibleTrayPieceCount: visibleLooseTrayPieceCount,
         referenceOpen,
         toolsOpen,
         completionRatio: Number(completionRatio.toFixed(3)),
@@ -397,7 +424,9 @@ export function PlayPage() {
     session,
     sessionId,
     toolsOpen,
-    trayPageCount
+    trayFilter,
+    trayPageCount,
+    visibleLooseTrayPieceCount
   ]);
 
   if (!loaded) {
@@ -480,16 +509,26 @@ export function PlayPage() {
           toggleEnabled();
         }}
         toolsOpen={toolsOpen}
+        edgeFilterActive={trayFilter === 'edges'}
         onToggleTools={() => {
           setToolsOpen((current) => !current);
         }}
-        onSeparateEdges={() => {
-          void play('separate_edges');
+        onToggleEdgeFilter={() => {
           setToolsOpen(false);
+
+          if (trayFilter === 'edges') {
+            setTrayFilter('all');
+            setCurrentTrayPage(0);
+            return;
+          }
+
+          void play('separate_edges');
           setSession({
             ...separateEdgePieces(session, session.definition),
             elapsedMs
           });
+          setTrayFilter('edges');
+          setCurrentTrayPage(0);
         }}
         onToggleReference={() => {
           setToolsOpen(false);
@@ -509,6 +548,7 @@ export function PlayPage() {
               highlightedPieceId={highlightedPieceId}
               viewport={playViewportSize}
               currentTrayPage={currentTrayPage}
+              trayFilter={trayFilter}
               onRequestPreviousTrayPage={() => {
                 setCurrentTrayPage((current) => Math.max(0, current - 1));
               }}
@@ -559,16 +599,18 @@ export function PlayPage() {
                     <button
                       type="button"
                       className="ghost-button"
+                      aria-label="이전 페이지"
                       onClick={() => {
                         setCurrentTrayPage((current) => Math.max(0, current - 1));
                       }}
                       disabled={currentTrayPage <= 0}
                     >
-                      이전 페이지
+                      이전
                     </button>
                     <button
                       type="button"
                       className="ghost-button"
+                      aria-label="다음 페이지"
                       onClick={() => {
                         setCurrentTrayPage((current) =>
                           Math.min(Math.max(0, trayPageCount - 1), current + 1)
@@ -576,7 +618,7 @@ export function PlayPage() {
                       }}
                       disabled={currentTrayPage >= trayPageCount - 1}
                     >
-                      다음 페이지
+                      다음
                     </button>
                   </div>
                 </div>

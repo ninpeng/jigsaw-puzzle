@@ -1,5 +1,6 @@
 import {
   DIFFICULTY_PRESETS,
+  createHint,
   createPuzzleDefinition,
   createPuzzleSession,
   updatePiecePosition,
@@ -83,17 +84,36 @@ describe('puzzle engine', () => {
   it('creates new sessions with every loose piece placed in the tray', () => {
     const definition = createPuzzleDefinition(builtInSource, DIFFICULTY_PRESETS.easy);
     const session = createPuzzleSession(definition, { seed: 12 });
+    const traySlotIndexes = session.pieces
+      .map((piece) => piece.traySlotIndex)
+      .filter((index): index is number => index !== null)
+      .sort((left, right) => left - right);
 
     expect(session.trayCollapsed).toBe(false);
     expect(
       session.pieces.every(
-        (piece, index) =>
+        (piece) =>
           piece.fixed ||
           (piece.zone === 'tray' &&
-            piece.traySlotIndex === index &&
+            piece.traySlotIndex !== null &&
             piece.boardPosition === null)
       )
     ).toBe(true);
+    expect(traySlotIndexes).toEqual([...Array(session.pieces.length).keys()]);
+  });
+
+  it('shuffles tray order deterministically from the session seed', () => {
+    const definition = createPuzzleDefinition(builtInSource, DIFFICULTY_PRESETS.easy);
+    const getTrayOrder = (seed: number) =>
+      createPuzzleSession(definition, { seed }).pieces
+        .filter((piece) => piece.traySlotIndex !== null)
+        .sort((left, right) => left.traySlotIndex! - right.traySlotIndex!)
+        .map((piece) => piece.id);
+    const definitionOrder = definition.pieces.map((piece) => piece.id);
+
+    expect(getTrayOrder(12)).toEqual(getTrayOrder(12));
+    expect(getTrayOrder(12)).not.toEqual(getTrayOrder(13));
+    expect(getTrayOrder(12)).not.toEqual(definitionOrder);
   });
 
   it('stores normalized board coordinates when a loose piece moves onto the board', () => {
@@ -152,7 +172,7 @@ describe('puzzle engine', () => {
     });
   });
 
-  it('moves only unfixed edge pieces into the assist tray', () => {
+  it('reorders loose tray pieces without moving fixed or inner piece coordinates', () => {
     const definition = createPuzzleDefinition(builtInSource, DIFFICULTY_PRESETS.easy);
     const session = createPuzzleSession(definition, { seed: 7 });
     const fixedEdge = session.pieces.find((piece) => piece.isEdge)!;
@@ -161,13 +181,15 @@ describe('puzzle engine', () => {
     const arranged = separateEdgePieces(session, definition);
     const movedEdge = arranged.pieces.find((piece) => piece.id !== fixedEdge.id && piece.isEdge)!;
     const innerPiece = arranged.pieces.find((piece) => !piece.isEdge)!;
+    const originalMovedEdge = session.pieces.find((piece) => piece.id === movedEdge.id)!;
     const originalInnerPiece = session.pieces.find((piece) => piece.id === innerPiece.id)!;
 
     expect(arranged.assistActions.at(-1)?.type).toBe('separate_edges');
     expect(fixedEdge.x).toBe(session.pieces.find((piece) => piece.id === fixedEdge.id)!.x);
     expect(movedEdge.zone).toBe('tray');
     expect(movedEdge.traySlotIndex).not.toBeNull();
-    expect(movedEdge.y).toBeGreaterThanOrEqual(definition.board.y + definition.board.height + 24);
+    expect(movedEdge.x).toBe(originalMovedEdge.x);
+    expect(movedEdge.y).toBe(originalMovedEdge.y);
     expect(innerPiece.x).toBe(originalInnerPiece.x);
     expect(innerPiece.y).toBe(originalInnerPiece.y);
   });
@@ -192,19 +214,55 @@ describe('puzzle engine', () => {
     ]);
   });
 
+  it('places every loose edge piece before inner pieces after separating edges', () => {
+    const definition = createPuzzleDefinition(builtInSource, DIFFICULTY_PRESETS.medium);
+    const session = createPuzzleSession(definition, { seed: 7 });
+    const arranged = separateEdgePieces(session, definition);
+    const orderedTrayPieces = arranged.pieces
+      .filter((piece) => !piece.fixed && piece.zone === 'tray' && piece.traySlotIndex !== null)
+      .sort((left, right) => left.traySlotIndex! - right.traySlotIndex!);
+    const firstInnerPieceIndex = orderedTrayPieces.findIndex((piece) => !piece.isEdge);
+
+    expect(firstInnerPieceIndex).toBeGreaterThan(0);
+    expect(orderedTrayPieces.slice(0, firstInnerPieceIndex).every((piece) => piece.isEdge)).toBe(true);
+    expect(orderedTrayPieces.slice(firstInnerPieceIndex).every((piece) => !piece.isEdge)).toBe(true);
+  });
+
+  it('hints the first visible edge after edge pieces are separated', () => {
+    const definition = createPuzzleDefinition(builtInSource, DIFFICULTY_PRESETS.medium);
+    const arranged = separateEdgePieces(createPuzzleSession(definition, { seed: 7 }), definition);
+    arranged.pieces.forEach((piece) => {
+      if (piece.row === 0 || piece.col === 0) {
+        piece.fixed = true;
+      }
+    });
+
+    const hintResult = createHint(arranged);
+    const hintedPiece = hintResult.session.pieces.find(
+      (piece) => piece.id === hintResult.pieceId
+    );
+
+    expect(hintedPiece?.isEdge).toBe(true);
+  });
+
   it('keeps every initial piece assigned to the tray zone', () => {
     const definition = createPuzzleDefinition(builtInSource, DIFFICULTY_PRESETS.easy);
     const session = createPuzzleSession(definition, { seed: 22 });
+    const traySlotIndexes = session.pieces
+      .map((piece) => piece.traySlotIndex)
+      .filter((index): index is number => index !== null)
+      .sort((left, right) => left - right);
 
     expect(
       session.pieces.every(
-        (piece, index) =>
+        (piece) =>
           piece.zone === 'tray' &&
           !piece.fixed &&
-          piece.traySlotIndex === index &&
+          piece.traySlotIndex !== null &&
           piece.boardPosition === null
       )
     ).toBe(true);
+    expect(traySlotIndexes).toEqual([...Array(session.pieces.length).keys()]);
   });
 
   it('keeps every loose piece visible and outside the board origin area', () => {
